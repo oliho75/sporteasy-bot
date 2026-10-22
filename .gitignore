@@ -1,0 +1,5 @@
+.env
+session.json
+wishlist.json
+*.log
+.venv/

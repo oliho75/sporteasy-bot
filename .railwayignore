@@ -1,0 +1,9 @@
+.venv
+__pycache__
+*.pyc
+*.log
+*.png
+*.zip
+session.json
+wishlist.json
+.env
