@@ -31,6 +31,7 @@ import requests
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from sporteasy import Event, SporteasyClient
@@ -316,6 +317,7 @@ ACCOUNTS = load_accounts()
 
 # ================================================================= API
 app = FastAPI(title="Sporteasy bot")
+app.mount("/static", StaticFiles(directory=str(BASE / "static")), name="static")
 
 
 def _account(request: Request, name: str) -> Account:
