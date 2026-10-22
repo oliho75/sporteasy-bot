@@ -131,6 +131,7 @@ input[type=number]{width:52px;background:var(--panel2);border:1px solid var(--li
     </div>
     <div style="display:flex;gap:8px;align-items:center">
       <span class="pill" id="status"><span class="dot"></span><span id="statusTxt">…</span></span>
+      <button class="btn ghost" id="dntfy" onclick="testNotif()">Tester la notif</button>
       <button class="btn ghost" onclick="relogin()">Re-login</button>
       <button class="btn" onclick="load()">↻</button>
     </div>
@@ -168,7 +169,7 @@ input[type=number]{width:52px;background:var(--panel2);border:1px solid var(--li
   <div class="m-top"><h1><span class="logo"><span class="logo-ez">EZ</span><span class="logo-bad">bad</span><span class="logo-emoji">🏸</span></span> <span id="muname" style="font-size:13px;color:var(--muted);font-family:Inter"></span></h1><div class="switch" id="msw" onclick="togglePause()"></div></div>
   <div class="m-sub"><span id="mstatus">…</span><span id="mcount"></span></div>
   <div id="mlist"></div>
-  <div class="m-foot">Tape un créneau : <b style="color:var(--accent)">1× priorité</b> · <b style="color:var(--accent2)">2× fallback</b> · 3× retiré.<br>Le bot réserve à l'heure d'ouverture propre à chaque créneau (lue sur Sporteasy).<br><a href="#" onclick="document.getElementById('mlog').classList.toggle('show');return false">Journal</a> · <a href="#" onclick="relogin();return false">Re-login</a></div>
+  <div class="m-foot">Tape un créneau : <b style="color:var(--accent)">1× priorité</b> · <b style="color:var(--accent2)">2× fallback</b> · 3× retiré.<br>Le bot réserve à l'heure d'ouverture propre à chaque créneau (lue sur Sporteasy).<br><a href="#" onclick="document.getElementById('mlog').classList.toggle('show');return false">Journal</a> · <a href="#" onclick="relogin();return false">Re-login</a> · <a href="#" id="mntfy" onclick="testNotif();return false">Tester la notif</a></div>
   <div class="m-log" id="mlog"></div>
 </div>
 <div class="toast" id="toast"></div>
@@ -194,6 +195,7 @@ async function load(){
 
 function render(){
   if(S.user){$('#uname').textContent='· '+S.user;$('#muname').textContent='· '+S.user;}
+  for(const id of ['mntfy','dntfy']){const el=document.getElementById(id); if(el) el.style.display=S.ntfy?'':'none';}
   // status
   const st=$('#status');
   if(S.error){st.className='pill err';$('#statusTxt').textContent='Sporteasy : '+S.error.slice(0,60)}
@@ -287,6 +289,7 @@ async function removeWish(id){await api('DELETE','api/wish/'+id);load()}
 async function togglePause(){await api('POST','api/settings',{paused:!S.settings.paused});load()}
 async function setDelay(k){const lo=+$('#d_'+k+'_0').value,hi=+$('#d_'+k+'_1').value;await api('POST','api/settings',{delays:{...(S.settings.delays||{}),[k]:[lo,hi]}});load()}
 async function setMax(v){await api('POST','api/settings',{max_per_week:+v});load()}
+async function testNotif(){try{await api('POST','api/test-notif');toast('Notif envoyée 📲')}catch(e){toast('Pas de canal ntfy configuré')}}
 async function relogin(){toast('Login en cours…');try{await api('POST','api/login');toast('Connecté')}catch(e){toast('Login KO : '+e.message)}load()}
 load();setInterval(load,30000);
 </script>

@@ -38,6 +38,9 @@ from sporteasy import Event, SporteasyClient
 BASE = Path(__file__).resolve().parent
 os.chdir(BASE)
 load_dotenv(BASE / ".env")
+os.environ.setdefault("TZ", "Europe/Paris")
+if hasattr(time, "tzset"):
+    time.tzset()
 
 TEAM_ID = int(os.environ.get("SPORTEASY_TEAM_ID", "2050454"))
 TEAM_HOST = os.environ.get("SPORTEASY_TEAM_HOST", "sitebad.sporteasy.net")
@@ -62,8 +65,14 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name
 log = logging.getLogger("bot")
 
 
-def notify(title: str, msg: str) -> None:
+def notify(title: str, msg: str, ntfy: str = "", tags: str = "") -> None:
     log.info("NOTIF %s — %s", title, msg)
+    if ntfy:
+        try:
+            requests.post(f"https://ntfy.sh/{ntfy}", data=msg.encode("utf-8"),
+                          headers={"Title": title, "Tags": tags or "badminton", "Priority": "high"}, timeout=10)
+        except Exception as e:  # noqa: BLE001
+            log.warning("ntfy : %s", e)
     if sys.platform == "darwin":
         try:
             subprocess.run(["osascript", "-e", f'display notification "{msg}" with title "{title}" sound name "Glass"'],
@@ -84,10 +93,11 @@ def _week_key(dt: datetime) -> str:
 
 # ================================================================= Account
 class Account:
-    def __init__(self, name: str, email: str, password: str, token: str, invite: str = ""):
+    def __init__(self, name: str, email: str, password: str, token: str, invite: str = "", ntfy: str = ""):
         self.name = name
         self.token = token
         self.invite = invite.strip()
+        self.ntfy = ntfy.strip()
         self.dir = DATA / name
         self.dir.mkdir(parents=True, exist_ok=True)
         self.wishlist = self.dir / "wishlist.json"
@@ -161,7 +171,7 @@ class Account:
             self.record(wl, eid, "skipped", "un créneau prioritaire du même jour est déjà réservé"); self.save(wl); return
         if ev.full and not w.get("waitlist_ok"):
             self.record(wl, eid, "full", "complet (liste d'attente refusée)"); self.save(wl)
-            notify(f"Sporteasy [{self.name}] — complet", ev.name); return
+            notify("EZ bad — complet", f"{ev.name} ({ev.start_at:%a %d/%m %H:%M})", self.ntfy, "no_entry"); return
         try:
             ok, msg = self.client.book(ev)
         except PermissionError as e:
@@ -170,10 +180,10 @@ class Account:
             ok, msg = self.client.book(ev)
         except Exception as e:  # noqa: BLE001
             self.record(wl, eid, "error", str(e)[:200]); self.save(wl)
-            notify(f"Sporteasy [{self.name}] — erreur", f"{ev.name}: {e}"); return
+            notify("EZ bad — erreur", f"{ev.name}: {e}", self.ntfy, "x"); return
         self.record(wl, eid, "booked" if ok else ("waitlist" if "attente" in msg else "error"), msg)
         self.save(wl)
-        notify(f"Sporteasy [{self.name}]", msg)
+        notify("EZ bad", msg, self.ntfy, "white_check_mark,badminton" if ok else "hourglass")
         if ok and w.get("priority", 1) == 1:
             self.release_fallbacks(ev, wl)
 
@@ -186,7 +196,7 @@ class Account:
                     self.client.set_attendance(fe, "absent")
                     self.record(wl, eid, "released", "libéré : un créneau prioritaire du même jour est réservé")
                     self.save(wl)
-                    notify(f"Sporteasy [{self.name}] — libéré", fe.name)
+                    notify("EZ bad — libéré", f"{fe.name} ({fe.start_at:%a %d/%m %H:%M})", self.ntfy, "leftwards_arrow_with_hook")
                 except Exception as e:  # noqa: BLE001
                     self.log.warning("release fallback %s : %s", eid, e)
 
@@ -273,7 +283,8 @@ def load_accounts() -> dict[str, Account]:
     while os.environ.get(f"USER{i}_EMAIL"):
         name = (os.environ.get(f"USER{i}_NAME") or f"user{i}").strip().lower()
         accs[name] = Account(name, os.environ[f"USER{i}_EMAIL"], os.environ.get(f"USER{i}_PASSWORD", ""),
-                             os.environ.get(f"USER{i}_TOKEN", "").strip(), os.environ.get(f"USER{i}_INVITE", ""))
+                             os.environ.get(f"USER{i}_TOKEN", "").strip(), os.environ.get(f"USER{i}_INVITE", ""),
+                             os.environ.get(f"USER{i}_NTFY", ""))
         i += 1
     if not accs and os.environ.get("SPORTEASY_EMAIL"):   # compat mono-compte
         accs["ao"] = Account("ao", os.environ["SPORTEASY_EMAIL"], os.environ.get("SPORTEASY_PASSWORD", ""),
@@ -364,7 +375,7 @@ def state(request: Request, name: str):
         wl = acc.load()
     return {"user": acc.name, "events": [e.to_json() for e in events], "wishes": wl["wishes"],
             "settings": wl["settings"], "history": wl["history"][:30], "log": list(acc.recent)[-40:],
-            "error": err, "now": datetime.now().astimezone().isoformat(timespec="seconds")}
+            "error": err, "ntfy": bool(acc.ntfy), "now": datetime.now().astimezone().isoformat(timespec="seconds")}
 
 
 @app.post("/u/{name}/api/wish")
@@ -404,6 +415,15 @@ def set_settings(request: Request, name: str, s: Settings):
             wl["settings"][k] = v
         acc.save(wl)
     return wl["settings"]
+
+
+@app.post("/u/{name}/api/test-notif")
+def test_notif(request: Request, name: str):
+    acc = _account(request, name)
+    if not acc.ntfy:
+        raise HTTPException(400, "pas de canal ntfy configuré (USERn_NTFY)")
+    notify("EZ bad", "Test de notification : ça marche 🏸", acc.ntfy, "white_check_mark")
+    return {"ok": True, "topic": acc.ntfy}
 
 
 @app.post("/u/{name}/api/login")

@@ -35,8 +35,10 @@ Lien court à envoyer à chacun : `https://<domaine>/i/<USERn_INVITE>` (mets `US
 sinon c'est les 8 premiers caractères du token). Le lien pose le cookie et redirige vers sa page ;
 le token n'est jamais visible dans l'URL.
 Optionnelles (mêmes valeurs que .env.example) : `MAX_PER_WEEK`, `NOTIFY_WEBHOOK`, `TICK_SECONDS`…
-Sur Railway il n'y a pas de notif macOS : mets un `NOTIFY_WEBHOOK` (Slack incoming webhook, ou Discord
-webhook avec `/slack` à la fin de l'URL) pour recevoir "✅ Réservé" sur ton téléphone.
+**Notifications sur le téléphone (ntfy, gratuit)** : chacun installe l'app ntfy (App Store / Play Store),
+s'abonne à un topic imprévisible (ex. `ezbad-ao-7k2x9`), et tu mets `USERn_NTFY=ezbad-ao-7k2x9` dans les
+variables. Bouton "Tester la notif" dans l'UI. Le bot envoie ✅ réservé / ⏳ liste d'attente / ❌ erreur / ↩ libéré.
+(Alternative : `NOTIFY_WEBHOOK` Slack/Discord, commun à tous les comptes.)
 
 ## 4. Volume (pour ne pas perdre tes options à chaque redéploiement)
 Dashboard → service → Settings → Volumes → **Add volume**, mount path : `/data`.
