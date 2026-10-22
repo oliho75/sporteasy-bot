@@ -101,6 +101,23 @@ input[type=number]{width:52px;background:var(--panel2);border:1px solid var(--li
 .legend i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:5px;vertical-align:-1px}
 .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#fff;color:#111;padding:10px 16px;border-radius:12px;font-weight:600;font-size:13px;box-shadow:0 10px 30px rgba(0,0,0,.4);opacity:0;pointer-events:none;transition:.2s}
 .toast.show{opacity:1}
+.info-btn{width:30px;height:30px;border-radius:50%;border:1.5px solid var(--line);background:var(--panel);color:var(--muted);font:italic 700 15px Georgia,serif;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;padding:0;flex:none}
+.info-btn:hover{color:var(--text);border-color:#3a4150}
+.help-bg{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:900;display:none;align-items:flex-end;justify-content:center}
+.help-bg.show{display:flex}
+.help{background:var(--panel);border:1px solid var(--line);border-radius:20px 20px 0 0;width:100%;max-width:560px;max-height:86vh;overflow:auto;padding:18px 20px calc(24px + env(safe-area-inset-bottom));animation:up .22s ease-out}
+@media(min-width:701px){.help-bg{align-items:center}.help{border-radius:18px}}
+@keyframes up{from{transform:translateY(40px);opacity:0}to{transform:none;opacity:1}}
+.help-h{display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;position:sticky;top:-18px;background:var(--panel);padding:6px 0}
+.help-h b{font-size:18px}
+.help-x{background:none;border:0;color:var(--muted);font-size:28px;line-height:1;cursor:pointer;padding:0 4px}
+.help h4{margin:18px 0 6px;font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--accent)}
+.help p,.help li{font-size:14px;line-height:1.5;color:var(--text);margin:4px 0}
+.help ul{padding-left:0;list-style:none;margin:6px 0}
+.help li{padding:3px 0}
+.help .chip{display:inline-block;min-width:28px;text-align:center;font-size:11px;font-weight:700;padding:2px 6px;border-radius:999px;border:1px solid var(--line);color:var(--muted);margin-right:4px}
+.help .chip.p1{background:var(--accent);color:#111;border-color:var(--accent)}
+.help .chip.p2{background:var(--accent2);color:#111;border-color:var(--accent2)}
 .empty{color:var(--muted);font-size:12px;padding:6px 0}
 /* ---------- iPhone : vue agenda ultra simple ---------- */
 .m{display:none}
@@ -144,6 +161,7 @@ input[type=number]{width:52px;background:var(--panel2);border:1px solid var(--li
     <div style="display:flex;gap:8px;align-items:center">
       <span class="pill" id="status"><span class="dot"></span><span id="statusTxt">…</span></span>
       <button class="btn ghost" id="dntfy" onclick="testNotif()">Tester la notif</button>
+      <button class="info-btn" onclick="openHelp()" aria-label="Mode d'emploi">i</button>
       <button class="btn ghost" onclick="relogin()">Re-login</button>
       <button class="btn" onclick="load()">↻</button>
     </div>
@@ -178,11 +196,53 @@ input[type=number]{width:52px;background:var(--panel2);border:1px solid var(--li
   </aside>
 </div>
 <div class="m" id="m">
-  <div class="m-top"><h1><span class="logo"><span class="logo-ez">EZ</span><span class="logo-bad">bad</span><span class="logo-emoji">🏸</span></span> <span id="muname" style="font-size:13px;color:var(--muted);font-family:Inter"></span></h1><div class="switch" id="msw" onclick="togglePause()"></div></div>
+  <div class="m-top"><h1><span class="logo"><span class="logo-ez">EZ</span><span class="logo-bad">bad</span><span class="logo-emoji">🏸</span></span> <span id="muname" style="font-size:13px;color:var(--muted);font-family:Inter"></span></h1><div style="display:flex;align-items:center;gap:10px"><button class="info-btn" onclick="openHelp()" aria-label="Mode d'emploi">i</button><div class="switch" id="msw" onclick="togglePause()"></div></div></div>
   <div class="m-sub"><span id="mstatus">…</span><span id="mcount"></span></div>
   <div id="mlist"></div>
-  <div class="m-foot">Tape un créneau : <b style="color:var(--accent)">1× priorité</b> · <b style="color:var(--accent2)">2× fallback</b> · 3× retiré.<br>Le bot réserve à l'heure d'ouverture propre à chaque créneau (lue sur Sporteasy).<br><a href="#" onclick="document.getElementById('mlog').classList.toggle('show');return false">Journal</a> · <a href="#" onclick="relogin();return false">Re-login</a> · <a href="#" id="mntfy" onclick="testNotif();return false">Tester la notif</a></div>
+  <div class="m-foot"><a href="#" onclick="document.getElementById('mlog').classList.toggle('show');return false">Journal</a> · <a href="#" onclick="relogin();return false">Re-login</a> · <a href="#" id="mntfy" onclick="testNotif();return false">Tester la notif</a></div>
   <div class="m-log" id="mlog"></div>
+</div>
+<div class="help-bg" id="help" onclick="if(event.target===this)closeHelp()">
+  <div class="help">
+    <div class="help-h"><b>Mode d'emploi</b><button class="help-x" onclick="closeHelp()" aria-label="Fermer">×</button></div>
+
+    <h4>Poser tes options</h4>
+    <p>Tape sur un créneau :</p>
+    <ul>
+      <li><span class="chip p1">1×</span> <b>Priorité</b> : le créneau que tu veux.</li>
+      <li><span class="chip p2">2×</span> <b>Fallback</b> : ton plan B le même jour.</li>
+      <li><span class="chip">3×</span> <b>Retiré</b>.</li>
+    </ul>
+    <p>Taper un créneau où tu es déjà inscrit (bordure verte) te propose de te désinscrire, avec confirmation.</p>
+
+    <h4>Le fallback</h4>
+    <p>C'est un plan B, jour par jour. Si ta priorité du jour est réservée, le bot n'y touche pas. Si tu la rates, il prend le fallback. Et si la priorité passe finalement (liste d'attente), il libère le fallback tout seul.</p>
+
+    <h4>Quand le bot réserve</h4>
+    <p>Chaque créneau a sa propre heure d'ouverture, lue sur Sporteasy (« ouvre sam. 24 à 20h30 »). Le bot attend ensuite un petit délai aléatoire pour ne pas être toujours premier pile à la seconde :</p>
+    <ul>
+      <li><b>Lundi</b> : quelques secondes</li>
+      <li><b>Jeudi</b> : ~5 min</li>
+      <li><b>Autres jours</b> : ~15 min</li>
+    </ul>
+    <p>Réglable dans <i>Réglages</i> sur ordinateur.</p>
+
+    <h4>Les statuts</h4>
+    <ul class="st-list">
+      <li><b>priorité / fallback</b> : option posée, pas encore traitée.</li>
+      <li><b>programmé</b> : le bot connaît l'heure d'ouverture et attend.</li>
+      <li><b>ouvert · attente</b> : c'est ouvert, il laisse passer le délai.</li>
+      <li><b style="color:var(--ok)">réservé</b> : c'est dans la poche.</li>
+      <li><b style="color:var(--warn)">liste d'attente</b> : complet, tu es en attente.</li>
+      <li><b style="color:var(--danger)">erreur</b> : regarde le journal.</li>
+    </ul>
+
+    <h4>Le switch en haut</h4>
+    <p>Vert = le bot tourne. Gris = en pause, il ne réserve rien.</p>
+
+    <h4>Notifications</h4>
+    <p>Avec l'app <b>ntfy</b> abonnée à ton canal, tu reçois une notif à chaque réservation, liste d'attente ou erreur. « Tester la notif » en bas de page pour vérifier.</p>
+  </div>
 </div>
 <div class="toast" id="toast"></div>
 
@@ -301,9 +361,12 @@ async function removeWish(id){await api('DELETE','api/wish/'+id);load()}
 async function togglePause(){await api('POST','api/settings',{paused:!S.settings.paused});load()}
 async function setDelay(k){const lo=+$('#d_'+k+'_0').value,hi=+$('#d_'+k+'_1').value;await api('POST','api/settings',{delays:{...(S.settings.delays||{}),[k]:[lo,hi]}});load()}
 async function setMax(v){await api('POST','api/settings',{max_per_week:+v});load()}
+function openHelp(){$('#help').classList.add('show');try{localStorage.setItem('ezbad_help_seen','1')}catch(e){}}
+function closeHelp(){$('#help').classList.remove('show')}
 async function testNotif(){try{await api('POST','api/test-notif');toast('Notif envoyée 📲')}catch(e){toast('Pas de canal ntfy configuré')}}
 async function relogin(){toast('Login en cours…');try{await api('POST','api/login');toast('Connecté')}catch(e){toast('Login KO : '+e.message)}load()}
 load();setInterval(load,30000);
+try{if(!localStorage.getItem('ezbad_help_seen'))setTimeout(openHelp,900)}catch(e){}
 </script>
 </body>
 </html>
