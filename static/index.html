@@ -117,7 +117,7 @@ input[type=number]{width:52px;background:var(--panel2);border:1px solid var(--li
 <div class="app">
   <header>
     <div>
-      <h1>SitéBad <em>booking bot</em></h1>
+      <h1>SitéBad <em>booking bot</em> <span id="uname" style="font-size:16px;color:var(--muted);font-family:Inter"></span></h1>
       <div class="sub">Clique un créneau : <b style="color:var(--accent)">1 clic = priorité</b> · <b style="color:var(--accent2)">2 clics = fallback</b> · 3 clics = retiré. Le bot réserve à la seconde où Sporteasy ouvre les inscriptions (heure propre à chaque créneau).</div>
     </div>
     <div style="display:flex;gap:8px;align-items:center">
@@ -156,7 +156,7 @@ input[type=number]{width:52px;background:var(--panel2);border:1px solid var(--li
   </aside>
 </div>
 <div class="m" id="m">
-  <div class="m-top"><h1>SitéBad <em>bot</em></h1><div class="switch" id="msw" onclick="togglePause()"></div></div>
+  <div class="m-top"><h1>SitéBad <em>bot</em> <span id="muname" style="font-size:13px;color:var(--muted);font-family:Inter"></span></h1><div class="switch" id="msw" onclick="togglePause()"></div></div>
   <div class="m-sub"><span id="mstatus">…</span><span id="mcount"></span></div>
   <div id="mlist"></div>
   <div class="m-foot">Tape un créneau : <b style="color:var(--accent)">1× priorité</b> · <b style="color:var(--accent2)">2× fallback</b> · 3× retiré.<br>Le bot réserve à l'heure d'ouverture propre à chaque créneau (lue sur Sporteasy).<br><a href="#" onclick="document.getElementById('mlog').classList.toggle('show');return false">Journal</a> · <a href="#" onclick="relogin();return false">Re-login</a></div>
@@ -180,10 +180,11 @@ async function api(method,url,body){
   return r.json();
 }
 async function load(){
-  try{S=await api('GET','/api/state');render()}catch(e){$('#statusTxt').textContent='serveur injoignable';$('#status').className='pill err'}
+  try{S=await api('GET','api/state');render()}catch(e){$('#statusTxt').textContent='serveur injoignable';$('#status').className='pill err'}
 }
 
 function render(){
+  if(S.user){$('#uname').textContent='· '+S.user;$('#muname').textContent='· '+S.user;}
   // status
   const st=$('#status');
   if(S.error){st.className='pill err';$('#statusTxt').textContent='Sporteasy : '+S.error.slice(0,60)}
@@ -266,18 +267,18 @@ async function cycle(id){
   const e=S.events.find(x=>x.id===id);if(!e||e.is_cancelled)return;
   const w=S.wishes[id];
   try{
-    if(e.my_group==='participant'&&!w){ if(confirm('Tu es déjà inscrit. Te désinscrire ?')){await api('POST','/api/release/'+id);toast('Désinscrit')} }
-    else if(!w){await api('POST','/api/wish',{event_id:id,priority:1,waitlist_ok:true});toast('Priorité ✓')}
-    else if(w.priority===1){await api('POST','/api/wish',{event_id:id,priority:2,waitlist_ok:true});toast('Fallback ✓')}
-    else{await api('DELETE','/api/wish/'+id);toast('Retiré')}
+    if(e.my_group==='participant'&&!w){ if(confirm('Tu es déjà inscrit. Te désinscrire ?')){await api('POST','api/release/'+id);toast('Désinscrit')} }
+    else if(!w){await api('POST','api/wish',{event_id:id,priority:1,waitlist_ok:true});toast('Priorité ✓')}
+    else if(w.priority===1){await api('POST','api/wish',{event_id:id,priority:2,waitlist_ok:true});toast('Fallback ✓')}
+    else{await api('DELETE','api/wish/'+id);toast('Retiré')}
   }catch(err){toast('Erreur : '+err.message)}
   load();
 }
-async function removeWish(id){await api('DELETE','/api/wish/'+id);load()}
-async function togglePause(){await api('POST','/api/settings',{paused:!S.settings.paused});load()}
-async function setDelay(k){const lo=+$('#d_'+k+'_0').value,hi=+$('#d_'+k+'_1').value;await api('POST','/api/settings',{delays:{...(S.settings.delays||{}),[k]:[lo,hi]}});load()}
-async function setMax(v){await api('POST','/api/settings',{max_per_week:+v});load()}
-async function relogin(){toast('Login en cours…');try{await api('POST','/api/login');toast('Connecté')}catch(e){toast('Login KO : '+e.message)}load()}
+async function removeWish(id){await api('DELETE','api/wish/'+id);load()}
+async function togglePause(){await api('POST','api/settings',{paused:!S.settings.paused});load()}
+async function setDelay(k){const lo=+$('#d_'+k+'_0').value,hi=+$('#d_'+k+'_1').value;await api('POST','api/settings',{delays:{...(S.settings.delays||{}),[k]:[lo,hi]}});load()}
+async function setMax(v){await api('POST','api/settings',{max_per_week:+v});load()}
+async function relogin(){toast('Login en cours…');try{await api('POST','api/login');toast('Connecté')}catch(e){toast('Login KO : '+e.message)}load()}
 load();setInterval(load,30000);
 </script>
 </body>

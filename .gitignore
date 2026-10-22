@@ -1,5 +1,9 @@
+__pycache__/
+*.pyc
+*.png
 .env
 session.json
 wishlist.json
 *.log
 .venv/
+*.zip

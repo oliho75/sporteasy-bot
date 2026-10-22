@@ -23,8 +23,6 @@ log = logging.getLogger("sporteasy")
 
 API = "https://api.sporteasy.net/v2.1"
 LOGIN_URL = "https://app.sporteasy.net/en/login/"
-def _session_file() -> Path:
-    return Path(os.environ.get("DATA_DIR", ".")) / "session.json"
 UA = ("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
       "(KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36")
 
@@ -70,7 +68,8 @@ def _dt(s: str | None) -> datetime | None:
 
 
 class SporteasyClient:
-    def __init__(self, team_id: int, team_host: str, email: str, password: str):
+    def __init__(self, team_id: int, team_host: str, email: str, password: str, session_file: Path | None = None):
+        self.session_file = Path(session_file) if session_file else Path(os.environ.get("DATA_DIR", ".")) / "session.json"
         self.team_id = team_id
         self.team_host = team_host            # ex: sitebad.sporteasy.net
         self.email = email
@@ -88,16 +87,16 @@ class SporteasyClient:
 
     # ---------- session ----------
     def _load_session(self) -> None:
-        if _session_file().exists():
+        if self.session_file.exists():
             try:
-                for c in json.loads(_session_file().read_text()):
+                for c in json.loads(self.session_file.read_text()):
                     self.s.cookies.set(c["name"], c["value"], domain=c["domain"], path=c.get("path", "/"))
-                log.info("session chargée depuis %s", _session_file())
+                log.info("session chargée depuis %s", self.session_file)
             except Exception as e:  # noqa: BLE001
                 log.warning("session.json illisible (%s), on relogue", e)
 
     def _save_session(self, cookies: list[dict[str, Any]]) -> None:
-        _session_file().write_text(json.dumps(cookies, indent=1))
+        self.session_file.write_text(json.dumps(cookies, indent=1))
 
     def is_logged_in(self) -> bool:
         try:

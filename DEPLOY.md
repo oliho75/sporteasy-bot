@@ -15,13 +15,22 @@ railway init                # nom : sporteasy-bot
 railway up                  # build de l'image (~3 min la première fois)
 ```
 
-## 3. Variables (dashboard Railway → ton service → Variables)
-Obligatoires :
+## 3. Variables (dashboard Railway → ton service → Variables → Raw Editor)
+Un bloc par compte ; chaque personne a son URL `/u/<NAME>/?token=<TOKEN>` et ses propres options :
 ```
-SPORTEASY_EMAIL      = ton email
-SPORTEASY_PASSWORD   = ton mot de passe
-ACCESS_TOKEN         = résultat de :  openssl rand -hex 24
+USER1_NAME=ao
+USER1_EMAIL=…
+USER1_PASSWORD=…
+USER1_TOKEN=…        # openssl rand -hex 24, un différent par personne
+USER2_NAME=pote1
+USER2_EMAIL=…
+USER2_PASSWORD=…
+USER2_TOKEN=…
+SPORTEASY_TEAM_ID=2050454
+SPORTEASY_TEAM_HOST=sitebad.sporteasy.net
+TZ=Europe/Paris
 ```
+Ajouter un compte = ajouter un bloc USER3_* et redéployer. Chacun règle ses délais dans son UI.
 Optionnelles (mêmes valeurs que .env.example) : `MAX_PER_WEEK`, `NOTIFY_WEBHOOK`, `TICK_SECONDS`…
 Sur Railway il n'y a pas de notif macOS : mets un `NOTIFY_WEBHOOK` (Slack incoming webhook, ou Discord
 webhook avec `/slack` à la fin de l'URL) pour recevoir "✅ Réservé" sur ton téléphone.
@@ -31,7 +40,8 @@ Dashboard → service → Settings → Volumes → **Add volume**, mount path : 
 
 ## 5. URL publique
 Dashboard → service → Settings → Networking → **Generate domain** (port 8765).
-Sur l'iPhone, ouvre une fois `https://<ton-domaine>.up.railway.app/?token=<ACCESS_TOKEN>`
+Sur l'iPhone, ouvre une fois `https://<ton-domaine>.up.railway.app/u/ao/?token=<USER1_TOKEN>`
+(ton pote : `/u/pote1/?token=<USER2_TOKEN>`)
 puis Safari → Partager → **Sur l'écran d'accueil**. Le token est gardé en cookie un an.
 
 ## Mises à jour
