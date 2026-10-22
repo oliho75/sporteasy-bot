@@ -60,7 +60,7 @@ LOGFILE = DATA / "bot.log"
 PUBLIC = bool(os.environ.get("RAILWAY_ENVIRONMENT") or os.environ.get("PUBLIC"))
 
 # Délai aléatoire après l'ouverture, minutes [min, max], par jour du créneau. Chaque compte a le sien.
-DEFAULT_DELAYS: dict[str, list[float]] = {"mon": [0.17, 0.5], "thu": [4, 6], "default": [12, 18]}
+DEFAULT_DELAYS: dict[str, list[float]] = {"mon": [0.08, 0.25], "thu": [4, 6], "default": [12, 18]}
 _WD = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s",
@@ -222,7 +222,11 @@ class Account:
             d = self.pick_delay(wl, ev.start_at)
             w["book_at"] = (now + timedelta(seconds=d)).isoformat(timespec="seconds")
             self.record(wl, eid, "delaying", f"ouvert, je réserve dans {int(d // 60)}m{int(d % 60):02d}")
-            self.save(wl); return
+            self.save(wl)
+            if d <= 90:   # délai court : on attend à la seconde près au lieu du tick de 10 s
+                time.sleep(d)
+                self.try_book(ev, wl)
+            return
         if now >= datetime.fromisoformat(w["book_at"]):
             self.try_book(ev, wl)
 
