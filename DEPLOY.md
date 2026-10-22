@@ -38,6 +38,10 @@ Optionnelles (mêmes valeurs que .env.example) : `MAX_PER_WEEK`, `NOTIFY_WEBHOOK
 **Notifications sur le téléphone (ntfy, gratuit)** : chacun installe l'app ntfy (App Store / Play Store),
 s'abonne à un topic imprévisible (ex. `ezbad-ao-7k2x9`), et tu mets `USERn_NTFY=ezbad-ao-7k2x9` dans les
 variables. Bouton "Tester la notif" dans l'UI. Le bot envoie ✅ réservé / ⏳ liste d'attente / ❌ erreur / ↩ libéré.
+**Par email (Resend, sans app)** : crée une clé sur resend.com, mets `RESEND_API_KEY=re_…` dans les variables.
+Chacun reçoit sur son adresse Sporteasy (`USERn_EMAIL`), ou sur `USERn_EMAIL_NOTIF` si défini.
+Sans domaine vérifié chez Resend, seul l'email du compte Resend peut recevoir ; pour envoyer aux potes,
+vérifie un domaine (DNS) et mets `RESEND_FROM="EZ bad <bot@tondomaine.fr>"`.
 (Alternative : `NOTIFY_WEBHOOK` Slack/Discord, commun à tous les comptes.)
 
 ## 4. Volume (pour ne pas perdre tes options à chaque redéploiement)

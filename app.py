@@ -51,6 +51,8 @@ HOT_INTERVAL = float(os.environ.get("HOT_INTERVAL_SECONDS", "1.5"))
 HOT_MAX_MIN = int(os.environ.get("HOT_MAX_MINUTES", "20"))
 MAX_PER_WEEK = int(os.environ.get("MAX_PER_WEEK", "5"))
 WEBHOOK = os.environ.get("NOTIFY_WEBHOOK", "")
+RESEND_KEY = os.environ.get("RESEND_API_KEY", "").strip()
+RESEND_FROM = os.environ.get("RESEND_FROM", "EZ bad <onboarding@resend.dev>").strip()
 DATA = Path(os.environ.get("DATA_DIR", str(BASE)))
 DATA.mkdir(parents=True, exist_ok=True)
 LOGFILE = DATA / "bot.log"
@@ -65,8 +67,18 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name
 log = logging.getLogger("bot")
 
 
-def notify(title: str, msg: str, ntfy: str = "", tags: str = "") -> None:
+def notify(title: str, msg: str, ntfy: str = "", tags: str = "", email: str = "") -> None:
     log.info("NOTIF %s — %s", title, msg)
+    if email and RESEND_KEY:
+        try:
+            r = requests.post("https://api.resend.com/emails", timeout=10,
+                              headers={"Authorization": f"Bearer {RESEND_KEY}"},
+                              json={"from": RESEND_FROM, "to": [email], "subject": f"{title} — {msg[:60]}",
+                                    "text": f"{msg}\n\n— EZ bad 🏸"})
+            if r.status_code >= 400:
+                log.warning("resend %s : %s", r.status_code, r.text[:200])
+        except Exception as e:  # noqa: BLE001
+            log.warning("resend : %s", e)
     if ntfy:
         try:
             requests.post(f"https://ntfy.sh/{ntfy}", data=msg.encode("utf-8"),
@@ -93,11 +105,13 @@ def _week_key(dt: datetime) -> str:
 
 # ================================================================= Account
 class Account:
-    def __init__(self, name: str, email: str, password: str, token: str, invite: str = "", ntfy: str = ""):
+    def __init__(self, name: str, email: str, password: str, token: str, invite: str = "", ntfy: str = "",
+                 email_notif: str = ""):
         self.name = name
         self.token = token
         self.invite = invite.strip()
         self.ntfy = ntfy.strip()
+        self.email_notif = (email_notif or email).strip()
         self.dir = DATA / name
         self.dir.mkdir(parents=True, exist_ok=True)
         self.wishlist = self.dir / "wishlist.json"
@@ -171,7 +185,7 @@ class Account:
             self.record(wl, eid, "skipped", "un créneau prioritaire du même jour est déjà réservé"); self.save(wl); return
         if ev.full and not w.get("waitlist_ok"):
             self.record(wl, eid, "full", "complet (liste d'attente refusée)"); self.save(wl)
-            notify("EZ bad — complet", f"{ev.name} ({ev.start_at:%a %d/%m %H:%M})", self.ntfy, "no_entry"); return
+            notify("EZ bad — complet", f"{ev.name} ({ev.start_at:%a %d/%m %H:%M})", self.ntfy, "no_entry", self.email_notif); return
         try:
             ok, msg = self.client.book(ev)
         except PermissionError as e:
@@ -180,10 +194,10 @@ class Account:
             ok, msg = self.client.book(ev)
         except Exception as e:  # noqa: BLE001
             self.record(wl, eid, "error", str(e)[:200]); self.save(wl)
-            notify("EZ bad — erreur", f"{ev.name}: {e}", self.ntfy, "x"); return
+            notify("EZ bad — erreur", f"{ev.name}: {e}", self.ntfy, "x", self.email_notif); return
         self.record(wl, eid, "booked" if ok else ("waitlist" if "attente" in msg else "error"), msg)
         self.save(wl)
-        notify("EZ bad", msg, self.ntfy, "white_check_mark,badminton" if ok else "hourglass")
+        notify("EZ bad", msg, self.ntfy, "white_check_mark,badminton" if ok else "hourglass", self.email_notif)
         if ok and w.get("priority", 1) == 1:
             self.release_fallbacks(ev, wl)
 
@@ -196,7 +210,7 @@ class Account:
                     self.client.set_attendance(fe, "absent")
                     self.record(wl, eid, "released", "libéré : un créneau prioritaire du même jour est réservé")
                     self.save(wl)
-                    notify("EZ bad — libéré", f"{fe.name} ({fe.start_at:%a %d/%m %H:%M})", self.ntfy, "leftwards_arrow_with_hook")
+                    notify("EZ bad — libéré", f"{fe.name} ({fe.start_at:%a %d/%m %H:%M})", self.ntfy, "leftwards_arrow_with_hook", self.email_notif)
                 except Exception as e:  # noqa: BLE001
                     self.log.warning("release fallback %s : %s", eid, e)
 
@@ -284,7 +298,7 @@ def load_accounts() -> dict[str, Account]:
         name = (os.environ.get(f"USER{i}_NAME") or f"user{i}").strip().lower()
         accs[name] = Account(name, os.environ[f"USER{i}_EMAIL"], os.environ.get(f"USER{i}_PASSWORD", ""),
                              os.environ.get(f"USER{i}_TOKEN", "").strip(), os.environ.get(f"USER{i}_INVITE", ""),
-                             os.environ.get(f"USER{i}_NTFY", ""))
+                             os.environ.get(f"USER{i}_NTFY", ""), os.environ.get(f"USER{i}_EMAIL_NOTIF", ""))
         i += 1
     if not accs and os.environ.get("SPORTEASY_EMAIL"):   # compat mono-compte
         accs["ao"] = Account("ao", os.environ["SPORTEASY_EMAIL"], os.environ.get("SPORTEASY_PASSWORD", ""),
@@ -375,7 +389,7 @@ def state(request: Request, name: str):
         wl = acc.load()
     return {"user": acc.name, "events": [e.to_json() for e in events], "wishes": wl["wishes"],
             "settings": wl["settings"], "history": wl["history"][:30], "log": list(acc.recent)[-40:],
-            "error": err, "ntfy": bool(acc.ntfy), "now": datetime.now().astimezone().isoformat(timespec="seconds")}
+            "error": err, "ntfy": bool(acc.ntfy or RESEND_KEY), "now": datetime.now().astimezone().isoformat(timespec="seconds")}
 
 
 @app.post("/u/{name}/api/wish")
@@ -420,10 +434,10 @@ def set_settings(request: Request, name: str, s: Settings):
 @app.post("/u/{name}/api/test-notif")
 def test_notif(request: Request, name: str):
     acc = _account(request, name)
-    if not acc.ntfy:
-        raise HTTPException(400, "pas de canal ntfy configuré (USERn_NTFY)")
-    notify("EZ bad", "Test de notification : ça marche 🏸", acc.ntfy, "white_check_mark")
-    return {"ok": True, "topic": acc.ntfy}
+    if not acc.ntfy and not RESEND_KEY:
+        raise HTTPException(400, "aucun canal configuré (USERn_NTFY ou RESEND_API_KEY)")
+    notify("EZ bad", "Test de notification : ça marche 🏸", acc.ntfy, "white_check_mark", acc.email_notif)
+    return {"ok": True, "ntfy": acc.ntfy or None, "email": acc.email_notif if RESEND_KEY else None}
 
 
 @app.post("/u/{name}/api/login")
