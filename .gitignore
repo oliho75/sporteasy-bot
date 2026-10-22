@@ -1,6 +1,6 @@
 __pycache__/
 *.pyc
-*.png
+login_debug.png
 .env
 session.json
 wishlist.json
