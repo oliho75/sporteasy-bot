@@ -54,7 +54,7 @@ LOGFILE = DATA / "bot.log"
 PUBLIC = bool(os.environ.get("RAILWAY_ENVIRONMENT") or os.environ.get("PUBLIC"))
 
 # Délai aléatoire après l'ouverture, minutes [min, max], par jour du créneau. Chaque compte a le sien.
-DEFAULT_DELAYS: dict[str, list[float]] = {"mon": [0.5, 1.5], "thu": [4, 6], "default": [12, 18]}
+DEFAULT_DELAYS: dict[str, list[float]] = {"mon": [0.17, 0.5], "thu": [4, 6], "default": [12, 18]}
 _WD = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s",
@@ -84,9 +84,10 @@ def _week_key(dt: datetime) -> str:
 
 # ================================================================= Account
 class Account:
-    def __init__(self, name: str, email: str, password: str, token: str):
+    def __init__(self, name: str, email: str, password: str, token: str, invite: str = ""):
         self.name = name
         self.token = token
+        self.invite = invite.strip()
         self.dir = DATA / name
         self.dir.mkdir(parents=True, exist_ok=True)
         self.wishlist = self.dir / "wishlist.json"
@@ -272,7 +273,7 @@ def load_accounts() -> dict[str, Account]:
     while os.environ.get(f"USER{i}_EMAIL"):
         name = (os.environ.get(f"USER{i}_NAME") or f"user{i}").strip().lower()
         accs[name] = Account(name, os.environ[f"USER{i}_EMAIL"], os.environ.get(f"USER{i}_PASSWORD", ""),
-                             os.environ.get(f"USER{i}_TOKEN", "").strip())
+                             os.environ.get(f"USER{i}_TOKEN", "").strip(), os.environ.get(f"USER{i}_INVITE", ""))
         i += 1
     if not accs and os.environ.get("SPORTEASY_EMAIL"):   # compat mono-compte
         accs["ao"] = Account("ao", os.environ["SPORTEASY_EMAIL"], os.environ.get("SPORTEASY_PASSWORD", ""),
@@ -325,6 +326,18 @@ class Settings(BaseModel):
     paused: bool | None = None
     max_per_week: int | None = None
     delays: dict[str, list[float]] | None = None
+
+
+@app.get("/i/{code}")
+def invite(code: str):
+    """Lien court d'invitation : /i/<code> → pose le cookie du compte et redirige vers sa page.
+    Variables : USERn_INVITE=<code> (6-12 caractères au choix) ; ou on dérive du token."""
+    for acc in ACCOUNTS.values():
+        if acc.token and code in (acc.invite, acc.token[:8]):
+            resp = RedirectResponse(f"/u/{acc.name}/", status_code=302)
+            resp.set_cookie(f"token_{acc.name}", acc.token, max_age=60 * 60 * 24 * 365, httponly=True, samesite="lax")
+            return resp
+    raise HTTPException(404, "lien invalide")
 
 
 @app.get("/")
@@ -439,5 +452,6 @@ if __name__ == "__main__":
         except Exception as e:  # noqa: BLE001
             acc.log.error("login impossible au démarrage : %s (relance via /api/login)", e)
         threading.Thread(target=acc.watcher, daemon=True, name=f"watcher-{acc.name}").start()
-        log.info("compte %s : http://localhost:%s/u/%s/%s", acc.name, PORT, acc.name, f"?token={acc.token}" if acc.token else "")
+        log.info("compte %s : /u/%s/%s%s", acc.name, acc.name, f"?token={acc.token}" if acc.token else "",
+                 f"  · lien court : /i/{acc.invite or acc.token[:8]}" if acc.token else "")
     uvicorn.run(app, host=os.environ.get("HOST", "127.0.0.1"), port=PORT, log_level="warning")

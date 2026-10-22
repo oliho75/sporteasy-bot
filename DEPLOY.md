@@ -31,6 +31,9 @@ SPORTEASY_TEAM_HOST=sitebad.sporteasy.net
 TZ=Europe/Paris
 ```
 Ajouter un compte = ajouter un bloc USER3_* et redéployer. Chacun règle ses délais dans son UI.
+Lien court à envoyer à chacun : `https://<domaine>/i/<USERn_INVITE>` (mets `USERn_INVITE=unmotcourt`,
+sinon c'est les 8 premiers caractères du token). Le lien pose le cookie et redirige vers sa page ;
+le token n'est jamais visible dans l'URL.
 Optionnelles (mêmes valeurs que .env.example) : `MAX_PER_WEEK`, `NOTIFY_WEBHOOK`, `TICK_SECONDS`…
 Sur Railway il n'y a pas de notif macOS : mets un `NOTIFY_WEBHOOK` (Slack incoming webhook, ou Discord
 webhook avec `/slack` à la fin de l'URL) pour recevoir "✅ Réservé" sur ton téléphone.

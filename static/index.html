@@ -3,7 +3,12 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>SitéBad · Booking bot</title>
+<title>EZ bad 🏸</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🏸</text></svg>">
+<meta name="apple-mobile-web-app-title" content="EZ bad">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#0f1115">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
@@ -20,6 +25,10 @@ a{color:inherit}
 header{grid-column:1/-1;display:flex;align-items:flex-end;justify-content:space-between;gap:16px;padding-bottom:6px}
 h1{font-family:'Instrument Serif',serif;font-weight:400;font-size:38px;margin:0;letter-spacing:-.01em}
 h1 em{color:var(--accent);font-style:italic}
+.logo{display:inline-flex;align-items:baseline;gap:4px;letter-spacing:-.03em}
+.logo-ez{font-family:Inter,system-ui,sans-serif;font-weight:800;font-size:1.05em;background:var(--accent);color:#0f1115;padding:0 .18em;border-radius:.18em;line-height:1.1;transform:skewX(-6deg);display:inline-block}
+.logo-bad{font-family:'Instrument Serif',serif;font-style:italic;font-weight:400;color:var(--text)}
+.logo-emoji{font-size:.85em;margin-left:2px;display:inline-block;transform:rotate(-15deg)}
 .sub{color:var(--muted);margin-top:4px}
 .pill{display:inline-flex;align-items:center;gap:6px;padding:6px 11px;border-radius:999px;border:1px solid var(--line);background:var(--panel);font-size:12px;color:var(--muted)}
 .pill .dot{width:8px;height:8px;border-radius:50%;background:var(--ok);box-shadow:0 0 10px var(--ok)}
@@ -117,7 +126,7 @@ input[type=number]{width:52px;background:var(--panel2);border:1px solid var(--li
 <div class="app">
   <header>
     <div>
-      <h1>SitéBad <em>booking bot</em> <span id="uname" style="font-size:16px;color:var(--muted);font-family:Inter"></span></h1>
+      <h1><span class="logo"><span class="logo-ez">EZ</span><span class="logo-bad">bad</span><span class="logo-emoji">🏸</span></span> <span id="uname" style="font-size:16px;color:var(--muted);font-family:Inter"></span></h1>
       <div class="sub">Clique un créneau : <b style="color:var(--accent)">1 clic = priorité</b> · <b style="color:var(--accent2)">2 clics = fallback</b> · 3 clics = retiré. Le bot réserve à la seconde où Sporteasy ouvre les inscriptions (heure propre à chaque créneau).</div>
     </div>
     <div style="display:flex;gap:8px;align-items:center">
@@ -156,7 +165,7 @@ input[type=number]{width:52px;background:var(--panel2);border:1px solid var(--li
   </aside>
 </div>
 <div class="m" id="m">
-  <div class="m-top"><h1>SitéBad <em>bot</em> <span id="muname" style="font-size:13px;color:var(--muted);font-family:Inter"></span></h1><div class="switch" id="msw" onclick="togglePause()"></div></div>
+  <div class="m-top"><h1><span class="logo"><span class="logo-ez">EZ</span><span class="logo-bad">bad</span><span class="logo-emoji">🏸</span></span> <span id="muname" style="font-size:13px;color:var(--muted);font-family:Inter"></span></h1><div class="switch" id="msw" onclick="togglePause()"></div></div>
   <div class="m-sub"><span id="mstatus">…</span><span id="mcount"></span></div>
   <div id="mlist"></div>
   <div class="m-foot">Tape un créneau : <b style="color:var(--accent)">1× priorité</b> · <b style="color:var(--accent2)">2× fallback</b> · 3× retiré.<br>Le bot réserve à l'heure d'ouverture propre à chaque créneau (lue sur Sporteasy).<br><a href="#" onclick="document.getElementById('mlog').classList.toggle('show');return false">Journal</a> · <a href="#" onclick="relogin();return false">Re-login</a></div>
@@ -192,7 +201,7 @@ function render(){
   else{st.className='pill';$('#statusTxt').textContent='watcher actif · '+Object.values(S.wishes).filter(w=>['pending','waiting'].includes(w.state)).length+' en attente'}
   $('#sw').classList.toggle('on',!S.settings.paused);
   $('#maxw').value=S.settings.max_per_week||5;
-  const DD={mon:[0.5,1.5],thu:[4,6],default:[12,18],...(S.settings.delays||{})};
+  const DD={mon:[0.17,0.5],thu:[4,6],default:[12,18],...(S.settings.delays||{})};
   for(const k of ['mon','thu','default']){ if(document.activeElement.id!=='d_'+k+'_0')$('#d_'+k+'_0').value=DD[k][0]; if(document.activeElement.id!=='d_'+k+'_1')$('#d_'+k+'_1').value=DD[k][1]; }
 
   // calendar
