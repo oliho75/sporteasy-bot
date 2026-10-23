@@ -321,7 +321,6 @@ ACCOUNTS = load_accounts()
 
 # ================================================================= API
 app = FastAPI(title="Sporteasy bot")
-app.mount("/static", StaticFiles(directory=str(BASE / "static")), name="static")
 
 
 def _account(request: Request, name: str) -> Account:
@@ -371,11 +370,41 @@ def invite(code: str):
     raise HTTPException(404, "lien invalide")
 
 
+def _known_account(request: Request) -> "Account | None":
+    """Compte dont le cookie est présent et valide dans ce navigateur."""
+    for acc in ACCOUNTS.values():
+        if acc.token and request.cookies.get(f"token_{acc.name}") == acc.token:
+            return acc
+    return None
+
+
 @app.get("/")
-def root():
+def root(request: Request):
+    acc = _known_account(request)
+    if acc:
+        return RedirectResponse(f"/u/{acc.name}/", status_code=302)
     if len(ACCOUNTS) == 1 and not PUBLIC:
         return RedirectResponse(f"/u/{next(iter(ACCOUNTS))}/")
-    return JSONResponse({"detail": "utilise /u/<nom>/?token=…"}, status_code=404)
+    return JSONResponse({"detail": "Ouvre ton lien d'invitation EZ bad (…/i/<ton-code>)."}, status_code=404)
+
+
+@app.get("/static/")
+def static_root(request: Request):
+    return root(request)
+
+
+@app.get("/u/{name}/manifest.json")
+def manifest(name: str):
+    acc = ACCOUNTS.get(name.lower())
+    if acc is None:
+        raise HTTPException(404, "compte inconnu")
+    return JSONResponse({
+        "name": "EZ bad", "short_name": "EZ bad", "id": f"/u/{acc.name}/",
+        "start_url": f"/u/{acc.name}/", "scope": f"/u/{acc.name}/", "display": "standalone",
+        "background_color": "#0f1115", "theme_color": "#0f1115",
+        "icons": [{"src": "/static/icons/icon-192.png", "sizes": "192x192", "type": "image/png"},
+                  {"src": "/static/icons/icon-512.png", "sizes": "512x512", "type": "image/png"}],
+    }, media_type="application/manifest+json")
 
 
 @app.get("/u/{name}/")
@@ -482,6 +511,10 @@ def release(request: Request, name: str, event_id: int):
                                  "name": ev.name, "state": "released", "msg": "désinscrit manuellement"})
         acc.save(wl)
     return {"ok": True}
+
+
+# monté en dernier : les routes explicites (dont /static/) passent avant
+app.mount("/static", StaticFiles(directory=str(BASE / "static")), name="static")
 
 
 if __name__ == "__main__":
