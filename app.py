@@ -294,6 +294,15 @@ class Account:
                 for eid, w in active.items():
                     ev = events.get(eid)
                     if ev is None:
+                        # Créneau disparu du calendrier alors qu'il est à venir → supprimé par le club
+                        try:
+                            start = datetime.fromisoformat(w["start_at"])
+                        except Exception:  # noqa: BLE001
+                            continue
+                        if start > now and events and w.get("state") != "cancelled":
+                            self.record(wl, eid, "cancelled", "créneau supprimé par le club"); self.save(wl)
+                            notify("EZ bad — créneau supprimé", f"{w['name']} ({start:%a %d/%m %H:%M}) n'existe plus sur Sporteasy",
+                                   self.ntfy, "wastebasket", self.email_notif)
                         continue
                     if ev.is_cancelled:
                         self.record(wl, eid, "cancelled", "créneau annulé par le club"); self.save(wl); continue
