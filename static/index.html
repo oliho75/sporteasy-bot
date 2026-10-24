@@ -317,7 +317,7 @@ function render(){
   else{st.className='pill';$('#statusTxt').textContent='watcher actif · '+Object.values(S.wishes).filter(w=>['pending','waiting'].includes(w.state)).length+' en attente'}
   $('#sw').classList.toggle('on',!S.settings.paused);
   $('#maxw').value=S.settings.max_per_week||5;
-  const DD={mon:[0.08,0.25],thu:[4,6],default:[12,18],...(S.settings.delays||{})};
+  const DD={mon:[0,0.0167],thu:[4,6],default:[12,18],...(S.settings.delays||{})};
   for(const k of ['mon','thu','default']){ if(document.activeElement.id!=='d_'+k+'_0')$('#d_'+k+'_0').value=DD[k][0]; if(document.activeElement.id!=='d_'+k+'_1')$('#d_'+k+'_1').value=DD[k][1]; }
 
   // calendar

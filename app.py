@@ -48,7 +48,7 @@ TEAM_HOST = os.environ.get("SPORTEASY_TEAM_HOST", "sitebad.sporteasy.net")
 PORT = int(os.environ.get("PORT", "8765"))
 TICK = int(os.environ.get("TICK_SECONDS", "30"))
 HOT_WINDOW = int(os.environ.get("HOT_WINDOW_SECONDS", "120"))
-HOT_INTERVAL = float(os.environ.get("HOT_INTERVAL_SECONDS", "1.5"))
+HOT_INTERVAL = float(os.environ.get("HOT_INTERVAL_SECONDS", "1.0"))
 HOT_MAX_MIN = int(os.environ.get("HOT_MAX_MINUTES", "20"))
 MAX_PER_WEEK = int(os.environ.get("MAX_PER_WEEK", "5"))
 WEBHOOK = os.environ.get("NOTIFY_WEBHOOK", "")
@@ -60,7 +60,7 @@ LOGFILE = DATA / "bot.log"
 PUBLIC = bool(os.environ.get("RAILWAY_ENVIRONMENT") or os.environ.get("PUBLIC"))
 
 # Délai aléatoire après l'ouverture, minutes [min, max], par jour du créneau. Chaque compte a le sien.
-DEFAULT_DELAYS: dict[str, list[float]] = {"mon": [0.08, 0.25], "thu": [4, 6], "default": [12, 18]}
+DEFAULT_DELAYS: dict[str, list[float]] = {"mon": [0, 0.0167], "thu": [4, 6], "default": [12, 18]}
 _WD = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s",
@@ -122,6 +122,8 @@ class Account:
         self.log.addHandler(_Ring(self.recent))
         self.client = SporteasyClient(TEAM_ID, TEAM_HOST, email, password, session_file=self.dir / "session.json")
         self.cache: dict[str, Any] = {"at": 0.0, "events": []}
+        self.inflight: set[str] = set()          # créneaux en cours de réservation
+        self.hot_started: set[tuple[str, str]] = set()   # fenêtres rapides déjà lancées
 
     # ---------- wishlist ----------
     def load(self) -> dict[str, Any]:
@@ -215,37 +217,66 @@ class Account:
                 except Exception as e:  # noqa: BLE001
                     self.log.warning("release fallback %s : %s", eid, e)
 
-    def schedule_or_book(self, ev: Event, wl: dict[str, Any]) -> None:
-        eid = str(ev.id); w = wl["wishes"][eid]
-        now = datetime.now().astimezone()
-        if not w.get("book_at"):
-            d = self.pick_delay(wl, ev.start_at)
-            w["book_at"] = (now + timedelta(seconds=d)).isoformat(timespec="seconds")
-            self.record(wl, eid, "delaying", f"ouvert, je réserve dans {int(d // 60)}m{int(d % 60):02d}")
-            self.save(wl)
-            if d <= 90:   # délai court : on attend à la seconde près au lieu du tick de 10 s
+    def schedule_or_book(self, ev: Event, _wl: dict[str, Any] | None = None) -> None:
+        """Créneau ouvert : tire un délai aléatoire, puis réserve une fois le délai écoulé.
+        Délais courts (≤ 90 s) : attente à la seconde près, hors verrou. Délais longs : repris au tick."""
+        eid = str(ev.id)
+        with self.lock:
+            if eid in self.inflight:
+                return
+            wl = self.load(); w = wl["wishes"].get(eid)
+            if not w or w.get("state") in ("booked", "released", "cancelled"):
+                return
+            now = datetime.now().astimezone()
+            if not w.get("book_at"):
+                d = self.pick_delay(wl, ev.start_at)
+                w["book_at"] = (now + timedelta(seconds=d)).isoformat(timespec="seconds")
+                self.record(wl, eid, "delaying", f"ouvert, je réserve dans {int(d // 60)}m{int(d % 60):02d}" if d >= 1 else "ouvert, je réserve tout de suite")
+                self.save(wl)
+            else:
+                d = (datetime.fromisoformat(w["book_at"]) - now).total_seconds()
+            if d > 90:
+                return                      # le tick de 10 s reprendra
+            self.inflight.add(eid)
+        try:
+            if d > 0:
                 time.sleep(d)
-                self.try_book(ev, wl)
-            return
-        if now >= datetime.fromisoformat(w["book_at"]):
-            self.try_book(ev, wl)
+            with self.lock:
+                wl = self.load()
+                if wl["wishes"].get(eid, {}).get("state") not in ("booked", "released", "cancelled"):
+                    self.try_book(ev, wl)
+        finally:
+            with self.lock:
+                self.inflight.discard(eid)
 
-    def hot_wait(self, ev: Event, wl: dict[str, Any]) -> None:
-        deadline = (ev.registration_open_at or datetime.now().astimezone()) + timedelta(minutes=HOT_MAX_MIN)
-        self.log.info("⏱  mode rapide sur %s (ouverture %s)", ev.name, ev.registration_open_at)
+    def hot_wait(self, ev: Event, target: datetime, max_min: float) -> None:
+        """Poll rapide autour d'une heure d'ouverture probable (fil dédié)."""
+        deadline = target + timedelta(minutes=max_min)
+        self.log.info("⏱  mode rapide sur %s (ouverture possible %s)", ev.name, target.strftime("%H:%M"))
         while datetime.now().astimezone() < deadline:
             try:
                 fresh = self.client.event(ev.id)
             except PermissionError:
-                self.client.login(); continue
+                try:
+                    self.client.login()
+                except Exception as e:  # noqa: BLE001
+                    self.log.warning("relogin : %s", e); time.sleep(5)
+                continue
             except Exception as e:  # noqa: BLE001
                 self.log.warning("poll rapide : %s", e); time.sleep(HOT_INTERVAL * 2); continue
             if fresh.is_cancelled:
-                self.record(wl, str(ev.id), "cancelled", "créneau annulé par le club"); self.save(wl); return
+                return
             if fresh.step == "registration_opened" and fresh.update_url:
-                self.schedule_or_book(fresh, wl); return
+                self.log.info("🟢 %s ouvert à %s", ev.name, datetime.now().astimezone().strftime("%H:%M:%S"))
+                self.schedule_or_book(fresh)
+                return
             time.sleep(HOT_INTERVAL)
-        self.record(wl, str(ev.id), "pending", f"pas ouvert après {HOT_MAX_MIN} min, on repassera"); self.save(wl)
+
+    def _hot_at(self, ev: Event, target: datetime, max_min: float) -> None:
+        wait = (target - datetime.now().astimezone()).total_seconds() - 5
+        if wait > 0:
+            time.sleep(wait)
+        self.hot_wait(ev, target, max_min)
 
     # ---------- watcher ----------
     def watcher(self) -> None:
@@ -269,13 +300,17 @@ class Account:
                     if ev.my_group == "participant" and ev.my_status == "present":
                         self.record(wl, eid, "booked", "déjà inscrit"); self.save(wl); continue
                     if ev.step == "registration_opened" and ev.update_url:
-                        self.schedule_or_book(ev, wl); continue
-                    if ev.registration_open_at and 0 <= (ev.registration_open_at - now).total_seconds() <= HOT_WINDOW:
-                        wait = (ev.registration_open_at - now).total_seconds() - 5
-                        if wait > 0:
-                            time.sleep(wait)
-                        self.hot_wait(ev, wl)
-                    elif w.get("state") != "waiting":
+                        threading.Thread(target=self.schedule_or_book, args=(ev,), daemon=True).start(); continue
+                    if ev.registration_open_at:
+                        # Sporteasy ouvre parfois 1 h avant l'heure affichée (changement d'heure) :
+                        # on surveille en rapide autour des deux heures possibles.
+                        for target, max_min in ((ev.registration_open_at - timedelta(hours=1), 8),
+                                                (ev.registration_open_at, HOT_MAX_MIN)):
+                            key = (eid, target.isoformat())
+                            if key not in self.hot_started and -60 <= (target - now).total_seconds() <= HOT_WINDOW:
+                                self.hot_started.add(key)
+                                threading.Thread(target=self._hot_at, args=(ev, target, max_min), daemon=True).start()
+                    if w.get("state") not in ("waiting", "delaying"):
                         self.record(wl, eid, "waiting", f"ouverture prévue {ev.registration_open_at:%a %d/%m %H:%M}" if ev.registration_open_at else "en attente")
                         self.save(wl)
             except Exception as e:  # noqa: BLE001
