@@ -60,7 +60,7 @@ LOGFILE = DATA / "bot.log"
 PUBLIC = bool(os.environ.get("RAILWAY_ENVIRONMENT") or os.environ.get("PUBLIC"))
 
 # Délai aléatoire après l'ouverture, minutes [min, max], par jour du créneau. Chaque compte a le sien.
-DEFAULT_DELAYS: dict[str, list[float]] = {"mon": [0, 0.0167], "thu": [0.08, 0.83], "default": [12, 18]}
+DEFAULT_DELAYS: dict[str, list[float]] = {"mon": [0, 0.0167], "thu": [0.08, 0.83], "default": [1, 5]}
 _WD = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s",
