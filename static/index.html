@@ -264,7 +264,7 @@ setTimeout(function(){s.classList.add('out');setTimeout(function(){s.remove()},4
     <p>Chaque créneau a sa propre heure d'ouverture, lue sur Sporteasy (« ouvre sam. 24 à 20h30 »). Le bot attend ensuite un petit délai aléatoire pour ne pas être toujours premier pile à la seconde :</p>
     <ul>
       <li><b>Lundi</b> : quelques secondes</li>
-      <li><b>Jeudi</b> : ~5 min</li>
+      <li><b>Jeudi</b> : moins d'une minute</li>
       <li><b>Autres jours</b> : ~15 min</li>
     </ul>
     <p>Réglable dans <i>Réglages</i> sur ordinateur.</p>
@@ -317,7 +317,7 @@ function render(){
   else{st.className='pill';$('#statusTxt').textContent='watcher actif · '+Object.values(S.wishes).filter(w=>['pending','waiting'].includes(w.state)).length+' en attente'}
   $('#sw').classList.toggle('on',!S.settings.paused);
   $('#maxw').value=S.settings.max_per_week||5;
-  const DD={mon:[0,0.0167],thu:[4,6],default:[12,18],...(S.settings.delays||{})};
+  const DD={mon:[0,0.0167],thu:[0.08,0.83],default:[12,18],...(S.settings.delays||{})};
   for(const k of ['mon','thu','default']){ if(document.activeElement.id!=='d_'+k+'_0')$('#d_'+k+'_0').value=DD[k][0]; if(document.activeElement.id!=='d_'+k+'_1')$('#d_'+k+'_1').value=DD[k][1]; }
 
   // calendar
