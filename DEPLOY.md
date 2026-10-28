@@ -44,6 +44,18 @@ Sans domaine vérifié chez Resend, seul l'email du compte Resend peut recevoir 
 vérifie un domaine (DNS) et mets `RESEND_FROM="EZ bad <bot@tondomaine.fr>"`.
 (Alternative : `NOTIFY_WEBHOOK` Slack/Discord, commun à tous les comptes.)
 
+
+## Auto-inscription (recommandé)
+Plus besoin de mettre les identifiants des potes dans Railway :
+1. **Une fois** : ajoute `SECRET_KEY=<résultat de openssl rand -hex 32>` dans les variables Railway.
+   C'est la clé qui chiffre les mots de passe Sporteasy stockés sur le volume. **Ne la change jamais**
+   (sinon les comptes inscrits devront se reconnecter). Sans elle, une clé est générée sur le volume (moins sûr).
+2. Dans l'app (compte admin, `ADMIN_USERS=ao` par défaut) : bouton **＋** → lien d'invitation à usage unique
+   (7 jours, `INVITE_DAYS`). Le pote l'ouvre, entre son email/mot de passe Sporteasy, le bot teste la connexion
+   en direct et crée son compte. N'importe quel club Sporteasy (il colle l'adresse de son club).
+3. Chacun gère son compte dans ⓘ → Mon compte : canal ntfy, nouveau mot de passe, suppression.
+Les comptes `USERn_*` des variables continuent de fonctionner tels quels.
+
 ## 4. Volume (pour ne pas perdre tes options à chaque redéploiement)
 Dashboard → service → Settings → Volumes → **Add volume**, mount path : `/data`.
 

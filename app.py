@@ -14,10 +14,15 @@ Fichiers (DATA_DIR, = /data sur Railway) :
 """
 from __future__ import annotations
 
+import base64
+import hashlib
 import json
 import logging
 import os
 import random
+import re
+import secrets
+import shutil
 import subprocess
 import sys
 import threading
@@ -34,7 +39,7 @@ from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from sporteasy import Event, SporteasyClient
+from sporteasy import Event, LoginError, SporteasyClient
 
 BASE = Path(__file__).resolve().parent
 os.chdir(BASE)
@@ -58,6 +63,8 @@ DATA = Path(os.environ.get("DATA_DIR", str(BASE)))
 DATA.mkdir(parents=True, exist_ok=True)
 LOGFILE = DATA / "bot.log"
 PUBLIC = bool(os.environ.get("RAILWAY_ENVIRONMENT") or os.environ.get("PUBLIC"))
+ADMINS = {a.strip().lower() for a in os.environ.get("ADMIN_USERS", "ao").split(",") if a.strip()}
+INVITE_DAYS = int(os.environ.get("INVITE_DAYS", "7"))
 
 # Délai aléatoire après l'ouverture, minutes [min, max], par jour du créneau. Chaque compte a le sien.
 DEFAULT_DELAYS: dict[str, list[float]] = {"mon": [0, 0.0167], "thu": [0.08, 0.83], "default": [1, 5]}
@@ -107,12 +114,17 @@ def _week_key(dt: datetime) -> str:
 # ================================================================= Account
 class Account:
     def __init__(self, name: str, email: str, password: str, token: str, invite: str = "", ntfy: str = "",
-                 email_notif: str = ""):
+                 email_notif: str = "", team_id: int = 0, team_host: str = "", kind: str = "env"):
         self.name = name
         self.token = token
         self.invite = invite.strip()
-        self.ntfy = ntfy.strip()
+        self._ntfy = ntfy.strip()
+        self.email = email
         self.email_notif = (email_notif or email).strip()
+        self.kind = kind                      # "env" (variables Railway) ou "db" (auto-inscription)
+        self.team_host = team_host or TEAM_HOST
+        self.team_id = team_id or (TEAM_ID if self.team_host == TEAM_HOST else 0)
+        self.active = True
         self.dir = DATA / name
         self.dir.mkdir(parents=True, exist_ok=True)
         self.wishlist = self.dir / "wishlist.json"
@@ -120,10 +132,18 @@ class Account:
         self.recent: deque[str] = deque(maxlen=120)
         self.log = logging.getLogger(f"bot.{name}")
         self.log.addHandler(_Ring(self.recent))
-        self.client = SporteasyClient(TEAM_ID, TEAM_HOST, email, password, session_file=self.dir / "session.json")
+        self.client = SporteasyClient(self.team_id, self.team_host, email, password, session_file=self.dir / "session.json")
         self.cache: dict[str, Any] = {"at": 0.0, "events": []}
         self.inflight: set[str] = set()          # créneaux en cours de réservation
         self.hot_started: set[tuple[str, str]] = set()   # fenêtres rapides déjà lancées
+
+    @property
+    def ntfy(self) -> str:
+        """Topic ntfy : celui réglé par la personne dans l'app, sinon celui des variables."""
+        try:
+            return (self.load()["settings"].get("ntfy") or self._ntfy or "").strip()
+        except Exception:  # noqa: BLE001
+            return self._ntfy
 
     # ---------- wishlist ----------
     def load(self) -> dict[str, Any]:
@@ -281,7 +301,7 @@ class Account:
     # ---------- watcher ----------
     def watcher(self) -> None:
         self.log.info("watcher démarré")
-        while True:
+        while self.active:
             try:
                 with self.lock:
                     wl = self.load()
@@ -339,6 +359,49 @@ class _Ring(logging.Handler):
         self.buf.append(f"{datetime.now():%d/%m %H:%M:%S} {record.getMessage()}")
 
 
+# ================================================================= store chiffré (auto-inscription)
+DB_LOCK = threading.RLock()
+ACCOUNTS_FILE = DATA / "accounts.json"
+INVITES_FILE = DATA / "invites.json"
+RESERVED = {"admin", "api", "static", "join", "i", "u", "root", "www"}
+
+
+def _fernet():
+    from cryptography.fernet import Fernet
+    key = os.environ.get("SECRET_KEY", "").strip()
+    if key:
+        return Fernet(base64.urlsafe_b64encode(hashlib.sha256(key.encode()).digest()))
+    kf = DATA / "secret.key"                  # repli : clé générée une fois sur le volume
+    if not kf.exists():
+        kf.write_text(Fernet.generate_key().decode()); kf.chmod(0o600)
+    return Fernet(kf.read_text().strip().encode())
+
+
+def encrypt(txt: str) -> str:
+    return _fernet().encrypt(txt.encode()).decode()
+
+
+def decrypt(tok: str) -> str:
+    return _fernet().decrypt(tok.encode()).decode()
+
+
+def _read(path: Path) -> dict[str, Any]:
+    try:
+        return json.loads(path.read_text()) if path.exists() else {}
+    except Exception as e:  # noqa: BLE001
+        log.error("%s illisible : %s", path.name, e); return {}
+
+
+def _write(path: Path, data: dict[str, Any]) -> None:
+    tmp = path.with_suffix(".tmp"); tmp.write_text(json.dumps(data, indent=1, ensure_ascii=False)); tmp.chmod(0o600)
+    tmp.replace(path)
+
+
+def _db_account(name: str, rec: dict[str, Any]) -> Account:
+    return Account(name, rec["email"], decrypt(rec["pw"]), rec["token"], rec.get("invite", ""), rec.get("ntfy", ""),
+                   rec.get("email_notif", ""), int(rec.get("team_id") or 0), rec.get("team_host", ""), kind="db")
+
+
 # ================================================================= accounts from env
 def load_accounts() -> dict[str, Account]:
     accs: dict[str, Account] = {}
@@ -349,6 +412,14 @@ def load_accounts() -> dict[str, Account]:
                              os.environ.get(f"USER{i}_TOKEN", "").strip(), os.environ.get(f"USER{i}_INVITE", ""),
                              os.environ.get(f"USER{i}_NTFY", ""), os.environ.get(f"USER{i}_EMAIL_NOTIF", ""))
         i += 1
+    with DB_LOCK:
+        for name, rec in _read(ACCOUNTS_FILE).items():
+            if name in accs:
+                continue
+            try:
+                accs[name] = _db_account(name, rec)
+            except Exception as e:  # noqa: BLE001
+                log.error("compte %s illisible (clé de chiffrement changée ?) : %s", name, e)
     if not accs and os.environ.get("SPORTEASY_EMAIL"):   # compat mono-compte
         accs["ao"] = Account("ao", os.environ["SPORTEASY_EMAIL"], os.environ.get("SPORTEASY_PASSWORD", ""),
                              os.environ.get("ACCESS_TOKEN", "").strip())
@@ -468,7 +539,9 @@ def state(request: Request, name: str):
         wl = acc.load()
     return {"user": acc.name, "events": [e.to_json() for e in events], "wishes": wl["wishes"],
             "settings": wl["settings"], "history": wl["history"][:30], "log": list(acc.recent)[-40:],
-            "error": err, "ntfy": bool(acc.ntfy or RESEND_KEY), "now": datetime.now().astimezone().isoformat(timespec="seconds")}
+            "error": err, "ntfy": bool(acc.ntfy or RESEND_KEY), "now": datetime.now().astimezone().isoformat(timespec="seconds"),
+            "account": {"kind": acc.kind, "admin": acc.name in ADMINS, "club": acc.team_host, "email": acc.email,
+                        "ntfy_topic": acc.ntfy, "link": f"/i/{acc.invite or acc.token[:8]}" if acc.token else None}}
 
 
 @app.post("/u/{name}/api/wish")
@@ -556,6 +629,200 @@ def release(request: Request, name: str, event_id: int):
         acc.save(wl)
     return {"ok": True}
 
+
+
+# ================================================================= invitations & auto-inscription
+def _set_cookie(resp, acc: Account):
+    resp.set_cookie(f"token_{acc.name}", acc.token, max_age=60 * 60 * 24 * 365, httponly=True, samesite="lax")
+    return resp
+
+
+def _valid_invite(code: str) -> dict[str, Any] | None:
+    inv = _read(INVITES_FILE).get(code)
+    if not inv or inv.get("used_by") or inv.get("revoked"):
+        return None
+    if datetime.fromisoformat(inv["expires_at"]) < datetime.now().astimezone():
+        return None
+    return inv
+
+
+def _admin(request: Request, name: str) -> Account:
+    acc = _account(request, name)
+    if acc.name not in ADMINS:
+        raise HTTPException(403, "réservé à l'admin")
+    return acc
+
+
+@app.post("/u/{name}/api/invites")
+def create_invite(request: Request, name: str):
+    acc = _admin(request, name)
+    code = secrets.token_urlsafe(8)
+    with DB_LOCK:
+        inv = _read(INVITES_FILE)
+        inv[code] = {"created_by": acc.name, "created_at": datetime.now().astimezone().isoformat(timespec="seconds"),
+                     "expires_at": (datetime.now().astimezone() + timedelta(days=INVITE_DAYS)).isoformat(timespec="seconds"),
+                     "used_by": None, "fails": 0}
+        _write(INVITES_FILE, inv)
+    return {"code": code, "path": f"/join/{code}", "expires_days": INVITE_DAYS}
+
+
+@app.get("/u/{name}/api/invites")
+def list_invites(request: Request, name: str):
+    _admin(request, name)
+    now = datetime.now().astimezone()
+    inv = _read(INVITES_FILE)
+    pending = [{"code": c, "path": f"/join/{c}", "expires_at": v["expires_at"]} for c, v in inv.items()
+               if not v.get("used_by") and not v.get("revoked") and datetime.fromisoformat(v["expires_at"]) > now]
+    members = [{"name": a.name, "club": a.team_host, "kind": a.kind} for a in ACCOUNTS.values()]
+    return {"pending": pending, "members": members}
+
+
+@app.delete("/u/{name}/api/invites/{code}")
+def revoke_invite(request: Request, name: str, code: str):
+    _admin(request, name)
+    with DB_LOCK:
+        inv = _read(INVITES_FILE)
+        if code in inv:
+            inv[code]["revoked"] = True; _write(INVITES_FILE, inv)
+    return {"ok": True}
+
+
+@app.get("/join/{code}")
+def join_page(code: str):
+    if not _valid_invite(code):
+        return FileResponse(BASE / "static" / "join-invalid.html", status_code=404)
+    return FileResponse(BASE / "static" / "join.html")
+
+
+class Join(BaseModel):
+    name: str
+    email: str
+    password: str
+    club: str = ""
+    ntfy: str = ""
+
+
+def _club_host(club: str) -> str:
+    c = (club or "").strip().lower()
+    if not c:
+        return TEAM_HOST
+    c = re.sub(r"^https?://", "", c).split("/")[0]
+    if "." not in c:
+        c = f"{c}.sporteasy.net"
+    if not re.fullmatch(r"[a-z0-9-]+\.sporteasy\.net", c):
+        raise HTTPException(400, "adresse de club invalide (ex. monclub.sporteasy.net)")
+    return c
+
+
+@app.post("/join/{code}")
+def join_submit(code: str, j: Join):
+    with DB_LOCK:
+        inv = _valid_invite(code)
+    if not inv:
+        raise HTTPException(410, "invitation expirée ou déjà utilisée — demande-en une nouvelle")
+    name = re.sub(r"[^a-z0-9-]", "", j.name.strip().lower().replace(" ", "-"))[:20]
+    if len(name) < 2:
+        raise HTTPException(400, "prénom trop court (lettres et chiffres, sans accents)")
+    if name in ACCOUNTS or name in RESERVED or (DATA / name).exists():
+        raise HTTPException(409, f"« {name} » est déjà pris, choisis un autre nom")
+    email = j.email.strip()
+    if "@" not in email or not j.password:
+        raise HTTPException(400, "email et mot de passe Sporteasy obligatoires")
+    host = _club_host(j.club)
+    if any(a.email.lower() == email.lower() and a.team_host == host for a in ACCOUNTS.values()):
+        raise HTTPException(409, "ce compte Sporteasy est déjà branché sur EZ bad")
+    ntfy = re.sub(r"[^A-Za-z0-9_-]", "", j.ntfy.strip())[:64]
+
+    # Test de connexion en direct (session stockée dans un dossier temporaire)
+    tmp = DATA / f".pending-{secrets.token_hex(4)}"
+    tmp.mkdir(parents=True, exist_ok=True)
+    client = SporteasyClient(TEAM_ID if host == TEAM_HOST else 0, host, email, j.password, session_file=tmp / "session.json")
+    try:
+        client.login()
+    except LoginError as e:
+        shutil.rmtree(tmp, ignore_errors=True)
+        with DB_LOCK:
+            invs = _read(INVITES_FILE)
+            if code in invs:
+                invs[code]["fails"] = invs[code].get("fails", 0) + 1
+                if invs[code]["fails"] >= 5:
+                    invs[code]["revoked"] = True
+                _write(INVITES_FILE, invs)
+        raise HTTPException(401, str(e))
+    except Exception as e:  # noqa: BLE001
+        shutil.rmtree(tmp, ignore_errors=True)
+        log.warning("inscription %s : %s", name, e)
+        raise HTTPException(502, "Sporteasy ne répond pas, réessaie dans une minute")
+
+    with DB_LOCK:
+        if not _valid_invite(code) or name in ACCOUNTS:
+            shutil.rmtree(tmp, ignore_errors=True)
+            raise HTTPException(409, "invitation déjà utilisée entre-temps")
+        tmp.rename(DATA / name)
+        rec = {"email": email, "pw": encrypt(j.password), "token": secrets.token_hex(24),
+               "invite": f"{name}-{secrets.token_hex(3)}", "ntfy": ntfy, "team_id": client.team_id, "team_host": host,
+               "invited_by": inv["created_by"], "created_at": datetime.now().astimezone().isoformat(timespec="seconds")}
+        accs = _read(ACCOUNTS_FILE); accs[name] = rec; _write(ACCOUNTS_FILE, accs)
+        invs = _read(INVITES_FILE); invs[code]["used_by"] = name; _write(INVITES_FILE, invs)
+        acc = _db_account(name, rec)
+        ACCOUNTS[name] = acc
+    threading.Thread(target=acc.watcher, daemon=True, name=f"watcher-{name}").start()
+    log.info("nouveau compte %s (club %s, invité par %s)", name, host, inv["created_by"])
+    for a in ACCOUNTS.values():
+        if a.name == inv["created_by"]:
+            notify("EZ bad — nouveau membre", f"{name} a rejoint EZ bad ({host})", a.ntfy, "tada", "")
+    return _set_cookie(JSONResponse({"ok": True, "redirect": f"/u/{name}/"}), acc)
+
+
+class Pwd(BaseModel):
+    password: str
+
+
+@app.post("/u/{name}/api/account/password")
+def change_password(request: Request, name: str, body: Pwd):
+    acc = _account(request, name)
+    if acc.kind != "db":
+        raise HTTPException(400, "ce compte est géré dans les variables Railway, demande à l'admin")
+    test = SporteasyClient(acc.team_id, acc.team_host, acc.email, body.password, session_file=acc.dir / "session.json")
+    try:
+        test.login()
+    except LoginError as e:
+        raise HTTPException(401, str(e))
+    except Exception:  # noqa: BLE001
+        raise HTTPException(502, "Sporteasy ne répond pas, réessaie dans une minute")
+    with DB_LOCK:
+        accs = _read(ACCOUNTS_FILE); accs[acc.name]["pw"] = encrypt(body.password); _write(ACCOUNTS_FILE, accs)
+    acc.client.password = body.password
+    acc.client._load_session()
+    return {"ok": True}
+
+
+class Topic(BaseModel):
+    topic: str
+
+
+@app.post("/u/{name}/api/account/ntfy")
+def set_ntfy(request: Request, name: str, body: Topic):
+    acc = _account(request, name)
+    topic = re.sub(r"[^A-Za-z0-9_-]", "", body.topic.strip())[:64]
+    with acc.lock:
+        wl = acc.load(); wl["settings"]["ntfy"] = topic; acc.save(wl)
+    return {"ok": True, "topic": topic}
+
+
+@app.delete("/u/{name}/api/account")
+def delete_account(request: Request, name: str):
+    acc = _account(request, name)
+    if acc.kind != "db":
+        raise HTTPException(400, "ce compte est géré dans les variables Railway, demande à l'admin")
+    acc.active = False
+    with DB_LOCK:
+        accs = _read(ACCOUNTS_FILE); accs.pop(acc.name, None); _write(ACCOUNTS_FILE, accs)
+        ACCOUNTS.pop(acc.name, None)
+    shutil.rmtree(acc.dir, ignore_errors=True)
+    resp = JSONResponse({"ok": True}); resp.delete_cookie(f"token_{acc.name}")
+    log.info("compte %s supprimé par son propriétaire", acc.name)
+    return resp
 
 # monté en dernier : les routes explicites (dont /static/) passent avant
 app.mount("/static", StaticFiles(directory=str(BASE / "static")), name="static")

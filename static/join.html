@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Rejoindre EZ bad</title>
+<link rel="icon" type="image/png" sizes="32x32" href="/static/icons/favicon-32.png">
+<link rel="apple-touch-icon" sizes="180x180" href="/static/icons/icon-180.png">
+<meta name="theme-color" content="#0f1115">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#0f1115;--panel:#161920;--panel2:#1d212a;--line:#262b36;--text:#e8eaf0;--muted:#8b93a7;--accent:#c9f24d;--accent2:#7fd3ff;--danger:#ff6b6b;--ok:#5ee6a0}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--text);font-family:Inter,system-ui,sans-serif;font-size:15px}
+main{max-width:440px;margin:0 auto;padding:28px 18px calc(40px + env(safe-area-inset-bottom))}
+.logo{display:flex;align-items:center;gap:12px;margin-bottom:22px}
+.logo img{width:56px;height:56px;border-radius:14px}
+.logo b{font-size:26px;font-weight:800;letter-spacing:-.02em}
+h1{font-size:22px;margin:0 0 6px;letter-spacing:-.01em}
+.lead{color:var(--muted);line-height:1.5;margin:0 0 22px}
+label{display:block;font-size:12px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);margin:16px 0 6px}
+input{width:100%;background:var(--panel2);border:1px solid var(--line);color:var(--text);border-radius:12px;padding:13px 14px;font:inherit;font-size:16px;outline:none}
+input:focus{border-color:var(--accent)}
+.hint{color:var(--muted);font-size:12px;line-height:1.45;margin-top:6px}
+.hint a{color:var(--accent2)}
+.row{display:flex;gap:8px}
+.row input{flex:1}
+.small-btn{flex:none;background:var(--panel2);border:1px solid var(--line);color:var(--muted);border-radius:12px;padding:0 12px;font:inherit;font-size:13px;cursor:pointer}
+button.go{width:100%;margin-top:26px;background:var(--accent);color:#111;border:0;border-radius:14px;padding:15px;font:inherit;font-weight:800;font-size:16px;cursor:pointer}
+button.go:disabled{opacity:.6;cursor:wait}
+.err{display:none;margin-top:14px;background:rgba(255,107,107,.1);border:1px solid rgba(255,107,107,.35);color:#ffb3b3;border-radius:12px;padding:12px 14px;font-size:14px;line-height:1.4}
+.err.show{display:block}
+.box{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px;margin-top:22px;color:var(--muted);font-size:13px;line-height:1.5}
+.box b{color:var(--text)}
+.spin{display:inline-block;width:14px;height:14px;border:2px solid #111;border-right-color:transparent;border-radius:50%;animation:r .8s linear infinite;vertical-align:-2px;margin-right:8px}
+@keyframes r{to{transform:rotate(360deg)}}
+details{margin-top:4px}
+summary{cursor:pointer;color:var(--muted);font-size:13px;margin-top:16px}
+</style>
+</head>
+<body>
+<main>
+  <div class="logo"><img src="/static/icons/icon-192.png" alt=""><b>EZ bad</b></div>
+  <h1>Branche ton compte Sporteasy</h1>
+  <p class="lead">Le bot réserve tes créneaux à la seconde où ils ouvrent. Tu poses tes choix, il s'occupe du reste.</p>
+
+  <form id="f" autocomplete="on">
+    <label for="name">Ton prénom</label>
+    <input id="name" name="nickname" required maxlength="20" placeholder="ex. pierre" autocapitalize="none" autocorrect="off">
+    <div class="hint">Sert juste à nommer ta page. Sans accent ni espace.</div>
+
+    <label for="email">Email Sporteasy</label>
+    <input id="email" name="email" type="email" required autocomplete="username" placeholder="toi@exemple.com">
+
+    <label for="pwd">Mot de passe Sporteasy</label>
+    <input id="pwd" name="password" type="password" required autocomplete="current-password">
+
+    <details>
+      <summary>Options (club, notifications)</summary>
+      <label for="club">Adresse de ton club Sporteasy</label>
+      <input id="club" placeholder="sitebad.sporteasy.net" autocapitalize="none" autocorrect="off">
+      <div class="hint">Laisse vide pour SitéBad. Sinon, colle l'adresse de ton club (ce qu'il y a dans la barre d'adresse sur Sporteasy).</div>
+
+      <label for="ntfy">Canal de notifications (ntfy)</label>
+      <div class="row"><input id="ntfy" autocapitalize="none" autocorrect="off"><button type="button" class="small-btn" onclick="gen()">Générer</button></div>
+      <div class="hint">Pour recevoir « ✅ Réservé » sur ton téléphone : installe l'app <a href="https://apps.apple.com/app/ntfy/id1625396347" target="_blank" rel="noopener">ntfy</a>, abonne-toi à ce nom exact. Tu pourras le régler plus tard.</div>
+    </details>
+
+    <button class="go" id="go" type="submit">Connecter mon compte</button>
+    <div class="err" id="err"></div>
+  </form>
+
+  <div class="box">🔒 <b>Ton mot de passe</b> est testé une fois sur Sporteasy puis stocké <b>chiffré</b> sur le serveur, uniquement pour que le bot puisse se reconnecter. Personne ne le voit en clair. Tu peux le changer ou supprimer ton compte quand tu veux depuis l'app.</div>
+</main>
+<script>
+const code=location.pathname.split('/').filter(Boolean).pop();
+function gen(){const n=(document.getElementById('name').value||'moi').toLowerCase().replace(/[^a-z0-9]/g,'').slice(0,12)||'moi';const r=Math.random().toString(36).slice(2,8);document.getElementById('ntfy').value=`ezbad-${n}-${r}`}
+document.getElementById('f').addEventListener('submit',async e=>{
+  e.preventDefault();
+  const go=document.getElementById('go'),err=document.getElementById('err');
+  err.classList.remove('show');
+  go.disabled=true;go.innerHTML='<span class="spin"></span>Connexion à Sporteasy… (jusqu\'à 30 s)';
+  try{
+    const r=await fetch('/join/'+code,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
+      name:document.getElementById('name').value,email:document.getElementById('email').value,
+      password:document.getElementById('pwd').value,club:document.getElementById('club').value,ntfy:document.getElementById('ntfy').value})});
+    const d=await r.json().catch(()=>({}));
+    if(!r.ok) throw new Error(d.detail||('erreur '+r.status));
+    go.innerHTML='✅ Connecté ! Redirection…';
+    try{localStorage.removeItem('ezbad_help_seen')}catch(_){}
+    location.href=d.redirect;
+  }catch(x){
+    err.textContent=x.message;err.classList.add('show');
+    go.disabled=false;go.textContent='Connecter mon compte';
+  }
+});
+</script>
+</body>
+</html>

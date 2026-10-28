@@ -102,6 +102,25 @@ input[type=number]{width:52px;background:var(--panel2);border:1px solid var(--li
 .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#fff;color:#111;padding:10px 16px;border-radius:12px;font-weight:600;font-size:13px;box-shadow:0 10px 30px rgba(0,0,0,.4);opacity:0;pointer-events:none;transition:.2s}
 .toast.show{opacity:1}
 .info-btn{width:30px;height:30px;border-radius:50%;border:1.5px solid var(--line);background:var(--panel);color:var(--muted);font:italic 700 15px Georgia,serif;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;padding:0;flex:none}
+.inv-btn{width:30px;height:30px;border-radius:50%;border:0;background:var(--accent);color:#111;font:800 18px Inter,system-ui;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;padding:0;flex:none}
+.acc{background:var(--panel2);border:1px solid var(--line);border-radius:14px;padding:12px 14px}
+.acc-row{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:6px 0;font-size:14px}
+.acc-row span{color:var(--muted)}
+.acc-row b{font-weight:600;max-width:60%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.acc-note{color:var(--muted)!important;font-size:12px!important;margin:2px 0 8px!important}
+.acc-l{display:block;font-size:11px;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);margin:12px 0 6px}
+.acc-in{display:flex;gap:8px}
+.acc-in input{flex:1;min-width:0;width:auto;background:var(--panel);border:1px solid var(--line);color:var(--text);border-radius:10px;padding:10px 12px;font:inherit;font-size:16px}
+.mini{background:var(--panel);border:1px solid var(--line);color:var(--text);border-radius:10px;padding:8px 12px;font:inherit;font-size:13px;font-weight:600;cursor:pointer}
+.mini.wide{width:100%;margin-top:10px}
+.mini.danger{color:var(--danger);border-color:rgba(255,107,107,.35);margin-top:16px}
+.inv-link{background:var(--panel2);border:1px solid var(--line);border-radius:12px;padding:12px;font:13px ui-monospace,Menlo,monospace;word-break:break-all;margin:10px 0}
+.inv-actions{display:flex;gap:8px;flex-wrap:wrap}
+.inv-actions .btn{flex:1;padding:11px;font-size:14px}
+.inv-list{font-size:13px;color:var(--muted)}
+.inv-list div{display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-top:1px solid var(--line)}
+.inv-list div:first-child{border-top:0}
+.inv-list b{color:var(--text);font-weight:600}
 .info-btn:hover{color:var(--text);border-color:#3a4150}
 .help-bg{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:900;display:none;align-items:flex-end;justify-content:center}
 .help-bg.show{display:flex}
@@ -203,6 +222,7 @@ setTimeout(function(){s.classList.add('out');setTimeout(function(){s.remove()},4
     <div style="display:flex;gap:8px;align-items:center">
       <span class="pill" id="status"><span class="dot"></span><span id="statusTxt">…</span></span>
       <button class="btn ghost" id="dntfy" onclick="testNotif()">Tester la notif</button>
+      <button class="btn adm" onclick="openInvite()" style="display:none">＋ Inviter</button>
       <button class="info-btn" onclick="openHelp()" aria-label="Mode d'emploi">i</button>
       <button class="btn ghost" onclick="relogin()">Re-login</button>
       <button class="btn" onclick="load()">↻</button>
@@ -238,7 +258,7 @@ setTimeout(function(){s.classList.add('out');setTimeout(function(){s.remove()},4
   </aside>
 </div>
 <div class="m" id="m">
-  <div class="m-top"><h1><span class="logo"><span class="logo-ez">EZ</span><span class="logo-bad">bad</span><span class="logo-emoji">🏸</span></span> <span id="muname" style="font-size:13px;color:var(--muted);font-family:Inter"></span></h1><div style="display:flex;align-items:center;gap:10px"><button class="info-btn" onclick="openHelp()" aria-label="Mode d'emploi">i</button><div class="switch" id="msw" onclick="togglePause()"></div></div></div>
+  <div class="m-top"><h1><span class="logo"><span class="logo-ez">EZ</span><span class="logo-bad">bad</span><span class="logo-emoji">🏸</span></span> <span id="muname" style="font-size:13px;color:var(--muted);font-family:Inter"></span></h1><div style="display:flex;align-items:center;gap:10px"><button class="inv-btn adm" onclick="openInvite()" aria-label="Inviter" style="display:none">＋</button><button class="info-btn" onclick="openHelp()" aria-label="Mode d'emploi">i</button><div class="switch" id="msw" onclick="togglePause()"></div></div></div>
   <div class="m-sub"><span id="mstatus">…</span><span id="mcount"></span></div>
   <div id="mlist"></div>
   <div class="m-foot"><a href="#" onclick="document.getElementById('mlog').classList.toggle('show');return false">Journal</a> · <a href="#" onclick="relogin();return false">Re-login</a> · <a href="#" id="mntfy" onclick="testNotif();return false">Tester la notif</a></div>
@@ -283,7 +303,36 @@ setTimeout(function(){s.classList.add('out');setTimeout(function(){s.remove()},4
     <p>Vert = le bot tourne. Gris = en pause, il ne réserve rien.</p>
 
     <h4>Notifications</h4>
-    <p>Avec l'app <b>ntfy</b> abonnée à ton canal, tu reçois une notif à chaque réservation, liste d'attente ou erreur. « Tester la notif » en bas de page pour vérifier.</p>
+    <p>Installe l'app <b>ntfy</b>, abonne-toi au canal ci-dessous (nom exact), et tu reçois une notif à chaque réservation, liste d'attente ou erreur.</p>
+
+    <h4>Mon compte</h4>
+    <div class="acc">
+      <div class="acc-row"><span>Club</span><b id="a_club">—</b></div>
+      <div class="acc-row"><span>Sporteasy</span><b id="a_email">—</b></div>
+      <div class="acc-row"><span>Mon lien perso</span><button class="mini" onclick="copyLink()">Copier</button></div>
+      <p class="acc-note">Pour ouvrir EZ bad sur un autre téléphone. Garde-le pour toi.</p>
+
+      <label class="acc-l">Canal ntfy</label>
+      <div class="acc-in"><input id="a_ntfy" placeholder="ezbad-prenom-xxxx" autocapitalize="none" autocorrect="off"><button class="mini" onclick="saveNtfy()">OK</button></div>
+      <button class="mini wide" onclick="testNotif()">Tester la notif</button>
+
+      <div id="a_db">
+        <label class="acc-l">Nouveau mot de passe Sporteasy</label>
+        <div class="acc-in"><input id="a_pwd" type="password" autocomplete="new-password" placeholder="si tu l'as changé sur Sporteasy"><button class="mini" id="a_pwd_btn" onclick="savePwd()">OK</button></div>
+        <button class="mini wide danger" onclick="delAccount()">Supprimer mon compte EZ bad</button>
+      </div>
+      <p class="acc-note" id="a_env" style="display:none">Compte configuré par l'admin : pour changer ton mot de passe ou supprimer ton compte, demande-lui.</p>
+    </div>
+  </div>
+</div>
+<div class="help-bg" id="invite" onclick="if(event.target===this)closeInvite()">
+  <div class="help">
+    <div class="help-h"><b>Inviter quelqu'un</b><button class="help-x" onclick="closeInvite()" aria-label="Fermer">×</button></div>
+    <p>Envoie ce lien à ton pote. Il y branche lui-même son compte Sporteasy : tu n'as jamais son mot de passe. Le lien ne sert <b>qu'une fois</b> et expire dans <span id="inv_days">7</span> jours.</p>
+    <div class="inv-link" id="inv_link">…</div>
+    <div class="inv-actions"><button class="btn acc" onclick="shareInvite()">Partager</button><button class="btn" onclick="copyInvite()">Copier</button><button class="btn ghost" onclick="newInvite()">Nouveau lien</button></div>
+    <h4>Invitations en attente</h4><div id="inv_pending" class="inv-list"></div>
+    <h4>Membres</h4><div id="inv_members" class="inv-list"></div>
   </div>
 </div>
 <div class="toast" id="toast"></div>
@@ -309,6 +358,11 @@ async function load(){
 
 function render(){
   if(S.user){$('#uname').textContent='· '+S.user;$('#muname').textContent='· '+S.user;}
+  if(S.account){const a=S.account;
+    document.querySelectorAll('.adm').forEach(el=>el.style.display=a.admin?'':'none');
+    $('#a_club').textContent=a.club;$('#a_email').textContent=a.email;
+    if(document.activeElement!==$('#a_ntfy'))$('#a_ntfy').value=a.ntfy_topic||'';
+    $('#a_db').style.display=a.kind==='db'?'':'none';$('#a_env').style.display=a.kind==='db'?'none':'';}
   for(const id of ['mntfy','dntfy']){const el=document.getElementById(id); if(el) el.style.display=S.ntfy?'':'none';}
   // status
   const st=$('#status');
@@ -405,6 +459,22 @@ async function setDelay(k){const lo=+$('#d_'+k+'_0').value,hi=+$('#d_'+k+'_1').v
 async function setMax(v){await api('POST','api/settings',{max_per_week:+v});load()}
 function openHelp(){$('#help').classList.add('show');try{localStorage.setItem('ezbad_help_seen','1')}catch(e){}}
 function closeHelp(){$('#help').classList.remove('show')}
+let INV=null;
+async function openInvite(){$('#invite').classList.add('show');await refreshInvites();if(!INV)await newInvite()}
+function closeInvite(){$('#invite').classList.remove('show')}
+async function newInvite(){try{const r=await api('POST','api/invites');INV=location.origin+r.path;$('#inv_link').textContent=INV;$('#inv_days').textContent=r.expires_days;refreshInvites()}catch(e){toast('Erreur : '+e.message)}}
+async function refreshInvites(){try{const r=await api('GET','api/invites');
+  $('#inv_pending').innerHTML=r.pending.length?r.pending.map(p=>`<div><span>…/join/${esc(p.code)}</span><span>expire ${new Date(p.expires_at).toLocaleDateString('fr-FR',{day:'numeric',month:'short'})} <button class="mini" onclick="revokeInvite('${esc(p.code)}')">✕</button></span></div>`).join(''):'<div>Aucune</div>';
+  $('#inv_members').innerHTML=r.members.map(m=>`<div><b>${esc(m.name)}</b><span>${esc(m.club.replace('.sporteasy.net',''))}${m.kind==='env'?' · variables':''}</span></div>`).join('')}catch(e){}}
+async function revokeInvite(c){await api('DELETE','api/invites/'+c);if(INV&&INV.endsWith(c)){INV=null;$('#inv_link').textContent='—'}refreshInvites()}
+async function copyInvite(){if(!INV)return;try{await navigator.clipboard.writeText(INV);toast('Lien copié')}catch(e){toast(INV)}}
+async function shareInvite(){if(!INV)return;if(navigator.share){try{await navigator.share({title:'EZ bad',text:'Branche ton compte Sporteasy sur EZ bad 🏸',url:INV})}catch(e){}}else copyInvite()}
+async function copyLink(){const l=S.account&&S.account.link;if(!l)return;const u=location.origin+l;try{await navigator.clipboard.writeText(u);toast('Lien perso copié')}catch(e){toast(u)}}
+async function saveNtfy(){try{const r=await api('POST','api/account/ntfy',{topic:$('#a_ntfy').value});toast(r.topic?'Canal enregistré':'Canal retiré');load()}catch(e){toast('Erreur : '+e.message)}}
+async function savePwd(){const v=$('#a_pwd').value;if(!v)return;const b=$('#a_pwd_btn');b.disabled=true;b.textContent='…';toast('Test sur Sporteasy…');
+  try{await api('POST','api/account/password',{password:v});$('#a_pwd').value='';toast('Mot de passe mis à jour ✅')}catch(e){toast(e.message)}finally{b.disabled=false;b.textContent='OK'}}
+async function delAccount(){if(!confirm('Supprimer ton compte EZ bad ? Le bot arrête de réserver pour toi et ton mot de passe est effacé. Tes inscriptions Sporteasy déjà faites restent.'))return;
+  try{await api('DELETE','api/account');document.body.innerHTML='<div style="padding:60px 24px;text-align:center;color:#8b93a7;font-family:Inter,system-ui">Compte supprimé. À bientôt 🏸</div>'}catch(e){toast('Erreur : '+e.message)}}
 async function testNotif(){try{await api('POST','api/test-notif');toast('Notif envoyée 📲')}catch(e){toast('Pas de canal ntfy configuré')}}
 async function relogin(){toast('Login en cours…');try{await api('POST','api/login');toast('Connecté')}catch(e){toast('Login KO : '+e.message)}load()}
 load();setInterval(load,30000);

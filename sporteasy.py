@@ -67,6 +67,10 @@ def _dt(s: str | None) -> datetime | None:
     return datetime.fromisoformat(s) if s else None
 
 
+class LoginError(RuntimeError):
+    """Échec de connexion à Sporteasy, avec un message lisible par l'utilisateur."""
+
+
 class SporteasyClient:
     def __init__(self, team_id: int, team_host: str, email: str, password: str, session_file: Path | None = None):
         self.session_file = Path(session_file) if session_file else Path(os.environ.get("DATA_DIR", ".")) / "session.json"
@@ -124,10 +128,19 @@ class SporteasyClient:
         from playwright.sync_api import sync_playwright
 
         log.info("login Sporteasy via Chrome headless…")
+        import re as _re
+        seen_team: list[int] = []
+
+        def _on_request(req: Any) -> None:
+            m = _re.search(r"api\.sporteasy\.net/v[\d.]+/teams/(\d+)/", req.url)
+            if m:
+                seen_team.append(int(m.group(1)))
+
         with sync_playwright() as p:
             browser = p.chromium.launch(headless=True)
             ctx = browser.new_context(user_agent=UA, locale="fr-FR")
             page = ctx.new_page()
+            page.on("request", _on_request)
             page.goto(f"{LOGIN_URL}?next=https://{self.team_host}/calendar/grid/", wait_until="networkidle")
             # bannière cookies (Didomi) si présente
             for sel in ["button:has-text('Disagree and close')", "button:has-text('Refuser')",
@@ -155,16 +168,27 @@ class SporteasyClient:
                     break
             cookies = ctx.cookies()
             if not ok:
+                still_login = "/login" in page.url
                 try:
-                    page.screenshot(path="login_debug.png", full_page=True)
                     err = page.locator(".error, [class*='error'], [role='alert']").first.inner_text(timeout=1000)
                 except Exception:  # noqa: BLE001
                     err = ""
                 browser.close()
-                raise RuntimeError(
-                    f"login échoué — url={page.url!r} cookies={sorted(c['name'] for c in cookies)}"
-                    f"{' message=' + err.strip()[:120] if err else ''} (capture : login_debug.png)")
+                if still_login:
+                    raise LoginError("email ou mot de passe Sporteasy incorrect" + (f" ({err.strip()[:80]})" if err else ""))
+                raise LoginError(f"connexion refusée par le club {self.team_host} (tu en es bien membre ?)")
+            # Identifiant du club : vu dans les appels de la page calendrier
+            if not self.team_id:
+                for _ in range(20):
+                    if seen_team:
+                        break
+                    page.wait_for_timeout(500)
+                if seen_team:
+                    self.team_id = seen_team[0]
+                    log.info("club %s → team_id %s", self.team_host, self.team_id)
             browser.close()
+        if not self.team_id:
+            raise LoginError(f"connecté, mais impossible de trouver le calendrier du club {self.team_host}")
 
         self.s.cookies.clear()
         for c in cookies:
