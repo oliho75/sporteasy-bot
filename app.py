@@ -509,13 +509,17 @@ def static_root(request: Request):
 
 
 @app.get("/u/{name}/manifest.json")
-def manifest(name: str):
+def manifest(request: Request, name: str):
     acc = ACCOUNTS.get(name.lower())
     if acc is None:
         raise HTTPException(404, "compte inconnu")
+    # L'app de l'écran d'accueil iOS n'a pas toujours les cookies de Safari : si la personne est
+    # authentifiée, l'icône démarre sur son lien perso (/i/…) qui repose le cookie puis ouvre sa page.
+    authed = acc.token and request.cookies.get(f"token_{acc.name}") == acc.token
+    start = f"/i/{acc.invite or acc.token[:8]}" if authed else f"/u/{acc.name}/"
     return JSONResponse({
         "name": "EZ bad", "short_name": "EZ bad", "id": f"/u/{acc.name}/",
-        "start_url": f"/u/{acc.name}/", "scope": f"/u/{acc.name}/", "display": "standalone",
+        "start_url": start, "scope": "/", "display": "standalone",
         "background_color": "#0f1115", "theme_color": "#0f1115",
         "icons": [{"src": "/static/icons/icon-192.png", "sizes": "192x192", "type": "image/png"},
                   {"src": "/static/icons/icon-512.png", "sizes": "512x512", "type": "image/png"}],
