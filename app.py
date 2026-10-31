@@ -67,7 +67,7 @@ ADMINS = {a.strip().lower() for a in os.environ.get("ADMIN_USERS", "ao").split("
 INVITE_DAYS = int(os.environ.get("INVITE_DAYS", "7"))
 
 # Délai aléatoire après l'ouverture, minutes [min, max], par jour du créneau. Chaque compte a le sien.
-DEFAULT_DELAYS: dict[str, list[float]] = {"mon": [0, 0.0167], "thu": [0.08, 0.83], "default": [1, 5]}
+DEFAULT_DELAYS: dict[str, list[float]] = {"mon": [0.033, 0.083], "thu": [0.08, 0.83], "default": [1, 5]}
 _WD = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s",
