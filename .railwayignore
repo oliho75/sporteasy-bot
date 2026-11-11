@@ -7,3 +7,11 @@ login_debug.png
 session.json
 wishlist.json
 .env
+accounts.json
+invites.json
+secret.key
+*.log.*
+.pending-*
+*.tmp
+*.corrompu
+tests/

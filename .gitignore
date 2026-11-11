@@ -7,3 +7,10 @@ wishlist.json
 *.log
 .venv/
 *.zip
+accounts.json
+invites.json
+secret.key
+*.log.*
+.pending-*
+*.tmp
+*.corrompu

@@ -10,14 +10,17 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 import threading
 import time
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone, tzinfo
 from pathlib import Path
 from typing import Any
 
 import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
 log = logging.getLogger("sporteasy")
 
@@ -25,6 +28,37 @@ API = "https://api.sporteasy.net/v2.1"
 LOGIN_URL = "https://app.sporteasy.net/en/login/"
 UA = ("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
       "(KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36")
+
+TIMEOUT = (5, 15)        # (connexion, lecture) — usage normal
+FAST = (3, 5)            # autour d'une ouverture : on préfère réessayer vite qu'attendre
+
+
+def _club_tz() -> tzinfo:
+    """Fuseau du club. On ne dépend pas du fuseau de la machine (l'image Docker n'a pas forcément tzdata)."""
+    from zoneinfo import ZoneInfo
+    for name in (os.environ.get("CLUB_TZ"), os.environ.get("TZ"), "Europe/Paris"):
+        if not name:
+            continue
+        try:
+            return ZoneInfo(name.strip().lstrip(":"))
+        except Exception:  # noqa: BLE001
+            continue
+    return timezone.utc
+
+
+TZ = _club_tz()
+_JOURS = ["lun.", "mar.", "mer.", "jeu.", "ven.", "sam.", "dim."]
+
+
+def fr_when(dt: datetime) -> str:
+    """« jeu. 12/11 20:00 », à l'heure du club."""
+    d = dt.astimezone(TZ)
+    return f"{_JOURS[d.weekday()]} {d:%d/%m %H:%M}"
+
+
+# Un seul Chrome à la fois ou presque : chaque login en lance un (~300 Mo), et plusieurs comptes
+# peuvent vouloir se reconnecter au même moment.
+_BROWSERS = threading.BoundedSemaphore(max(1, int(os.environ.get("MAX_BROWSERS", "2"))))
 
 
 @dataclass
@@ -47,9 +81,21 @@ class Event:
     @property
     def capacity(self) -> int | None:
         # Le club met la capacité dans le nom : "Rigal 19h30-21h30 [35]"
-        import re
         m = re.search(r"\[(\d+)\]", self.name)
         return int(m.group(1)) if m else None
+
+    @property
+    def mine(self) -> bool:
+        """Je suis inscrit (place confirmée)."""
+        return self.my_group == "participant" and self.my_status == "present"
+
+    @property
+    def open(self) -> bool:
+        return self.step == "registration_opened" and bool(self.update_url)
+
+    @property
+    def when(self) -> str:
+        return fr_when(self.start_at)
 
     def to_json(self) -> dict[str, Any]:
         return {
@@ -64,11 +110,22 @@ class Event:
 
 
 def _dt(s: str | None) -> datetime | None:
-    return datetime.fromisoformat(s) if s else None
+    if not s:
+        return None
+    d = datetime.fromisoformat(s[:-1] + "+00:00" if s.endswith("Z") else s)
+    return (d if d.tzinfo else d.replace(tzinfo=TZ)).astimezone(TZ)
 
 
 class LoginError(RuntimeError):
     """Échec de connexion à Sporteasy, avec un message lisible par l'utilisateur."""
+
+
+class LoginThrottled(RuntimeError):
+    """On ne retente pas tout de suite (anti-rafale) : ce n'est pas un échec de connexion."""
+
+
+class EventGone(LookupError):
+    """Le créneau n'existe plus côté Sporteasy."""
 
 
 class SporteasyClient:
@@ -80,7 +137,19 @@ class SporteasyClient:
         self.password = password
         self._login_lock = threading.Lock()
         self._last_login_try = 0.0
+        self._last_login_ok = 0.0
+        self._next_login = 0.0
+        self._login_fails = 0
         self.s = requests.Session()
+        # Connexions gardées ouvertes entre deux appels : quand Sporteasy en ferme une de son côté,
+        # l'appel suivant échouait (« Remote end closed connection »). On réessaie tout de suite.
+        # GET et PUT présent/absent sont idempotents, donc sans risque.
+        retry = Retry(total=2, connect=2, read=1, status=1, backoff_factor=0.25,
+                      status_forcelist=(502, 503, 504), allowed_methods=frozenset({"GET", "PUT"}),
+                      raise_on_status=False)
+        adapter = HTTPAdapter(max_retries=retry, pool_connections=4, pool_maxsize=8)
+        self.s.mount("https://", adapter)
+        self.s.mount("http://", adapter)
         self.s.headers.update({
             "User-Agent": UA,
             "Accept": "application/json",
@@ -100,39 +169,74 @@ class SporteasyClient:
                 log.warning("session.json illisible (%s), on relogue", e)
 
     def _save_session(self, cookies: list[dict[str, Any]]) -> None:
-        self.session_file.write_text(json.dumps(cookies, indent=1))
+        tmp = self.session_file.with_suffix(".tmp")
+        tmp.write_text(json.dumps(cookies, indent=1))
+        try:
+            tmp.chmod(0o600)
+        except OSError:
+            pass
+        tmp.replace(self.session_file)
+
+    def set_password(self, password: str) -> None:
+        """Nouveau mot de passe (déjà validé) : on repart d'une session propre, sans temporisation."""
+        self.password = password
+        self._login_fails = 0
+        self._next_login = 0.0
+        self._load_session()
 
     def is_logged_in(self) -> bool:
         try:
-            now = datetime.now()
+            now = datetime.now(TZ)
             r = self.s.get(f"{API}/teams/{self.team_id}/events/",
-                           params={"month": now.month, "year": now.year, "web": 1}, timeout=15)
+                           params={"month": now.month, "year": now.year, "web": 1}, timeout=TIMEOUT)
             if r.status_code != 200:
                 log.info("check session : HTTP %s %s", r.status_code, r.text[:120])
             return r.status_code == 200
         except requests.RequestException:
             return False
 
-    def login(self) -> None:
-        """Login via Chrome headless : remplit le vrai formulaire, récupère les cookies."""
+    def login(self, force: bool = False) -> None:
+        """Login via Chrome headless : remplit le vrai formulaire, récupère les cookies.
+
+        Anti-rafale : un seul login à la fois, pas plus d'un toutes les 90 s, et de plus en plus
+        espacés après des échecs (un mot de passe refusé n'est pas retenté toutes les 90 s pendant
+        des jours). force=True (bouton « Re-login », changement de mot de passe) passe outre."""
         if not self.email or not self.password:
-            raise RuntimeError("SPORTEASY_EMAIL / SPORTEASY_PASSWORD manquants dans .env")
-        # anti-rafale : un seul login en cours, et pas plus d'un toutes les 90 s
+            raise LoginError("email ou mot de passe Sporteasy manquant")
+        asked = time.time()
         with self._login_lock:
-            if time.time() - self._last_login_try < 90:
-                raise RuntimeError("login déjà tenté il y a moins de 90 s, on attend")
-            self._last_login_try = time.time()
-            self._login_browser()
+            if self._last_login_ok >= asked:
+                return                      # un autre fil vient de reconnecter le compte pendant qu'on attendait
+            now = time.time()
+            if force:
+                if now - self._last_login_try < 15:
+                    raise LoginThrottled("connexion déjà tentée à l'instant, patiente quelques secondes")
+            elif now < self._next_login:
+                raise LoginThrottled(f"prochaine tentative de connexion dans {int(self._next_login - now) + 1} s")
+            self._last_login_try = now
+            self._next_login = now + 90
+            try:
+                with _BROWSERS:
+                    self._login_browser()
+            except LoginError:
+                self._login_fails += 1      # identifiants refusés : 5 min, 15 min, 45 min, puis 1 h
+                self._next_login = time.time() + min(100 * 3 ** self._login_fails, 3600)
+                raise
+            except Exception:
+                self._login_fails += 1      # panne technique : 90 s, 3 min, 6 min… plafonné à 30 min
+                self._next_login = time.time() + min(45 * 2 ** self._login_fails, 1800)
+                raise
+            self._login_fails = 0
+            self._last_login_ok = time.time()
 
     def _login_browser(self) -> None:
         from playwright.sync_api import sync_playwright
 
         log.info("login Sporteasy via Chrome headless…")
-        import re as _re
         seen_team: list[int] = []
 
         def _on_request(req: Any) -> None:
-            m = _re.search(r"api\.sporteasy\.net/v[\d.]+/teams/(\d+)/", req.url)
+            m = re.search(r"api\.sporteasy\.net/v[\d.]+/teams/(\d+)/", req.url)
             if m:
                 seen_team.append(int(m.group(1)))
 
@@ -158,7 +262,7 @@ class SporteasyClient:
             pwd_box.click()
             pwd_box.fill(self.password)
             pwd_box.press("Enter")
-            # Succès = on quitte la page de login ET un cookie de session apparaît.
+            # Succès = on quitte la page de login ET on arrive sur le site du club.
             ok = False
             for _ in range(60):  # 30 s max
                 page.wait_for_timeout(500)
@@ -221,21 +325,23 @@ class SporteasyClient:
 
     def events_month(self, year: int, month: int) -> list[Event]:
         r = self.s.get(f"{API}/teams/{self.team_id}/events/",
-                       params={"month": month, "year": year, "web": 1}, timeout=20)
+                       params={"month": month, "year": year, "web": 1}, timeout=TIMEOUT)
         if r.status_code in (401, 403):
             raise PermissionError("session expirée")
         r.raise_for_status()
         return [self._parse(e) for e in r.json().get("results", [])]
 
-    def event(self, event_id: int) -> Event:
-        r = self.s.get(f"{API}/teams/{self.team_id}/events/{event_id}/", timeout=20)
+    def event(self, event_id: int, timeout: tuple[float, float] | None = None) -> Event:
+        r = self.s.get(f"{API}/teams/{self.team_id}/events/{event_id}/", timeout=timeout or TIMEOUT)
+        if r.status_code in (404, 410):
+            raise EventGone(f"créneau {event_id} introuvable")
         if r.status_code in (401, 403):
             raise PermissionError("session expirée")
         r.raise_for_status()
         return self._parse(r.json())
 
     def upcoming(self, months_ahead: int = 2) -> list[Event]:
-        now = datetime.now().astimezone()
+        now = datetime.now(TZ)
         out: list[Event] = []
         y, m = now.year, now.month
         for _ in range(months_ahead + 1):
@@ -253,7 +359,8 @@ class SporteasyClient:
         return res
 
     # ---------- booking ----------
-    def set_attendance(self, ev: Event, status: str = "present") -> dict[str, Any]:
+    def set_attendance(self, ev: Event, status: str = "present",
+                       timeout: tuple[float, float] | None = None) -> dict[str, Any]:
         """status: present | absent. Retourne la réponse JSON."""
         url = ev.update_url
         if not url:
@@ -262,23 +369,34 @@ class SporteasyClient:
         headers = {"Content-Type": "application/json"}
         if csrf:
             headers["X-CSRFToken"] = csrf
-        r = self.s.put(url, json={"attendance_status": status}, headers=headers, timeout=20)
+        r = self.s.put(url, json={"attendance_status": status}, headers=headers, timeout=timeout or TIMEOUT)
         if r.status_code in (401, 403):
             raise PermissionError(f"refusé ({r.status_code}) : {r.text[:200]}")
         if r.status_code >= 400:
-            raise RuntimeError(f"PUT {r.status_code} : {r.text[:300]}")
+            raise RuntimeError(f"Sporteasy a refusé ({r.status_code}) : {r.text[:200]}")
         try:
             return r.json()
         except ValueError:
             return {"status_code": r.status_code, "text": r.text[:300]}
 
-    def book(self, ev: Event) -> tuple[bool, str]:
-        """Tente de réserver. Retourne (succès, message)."""
-        self.set_attendance(ev, "present")
-        time.sleep(0.5)
-        fresh = self.event(ev.id)
-        if fresh.my_group == "participant" and fresh.my_status == "present":
-            return True, f"✅ Réservé : {ev.name} ({ev.start_at:%a %d/%m %H:%M})"
-        if fresh.my_group == "waiting_list":
-            return False, f"⏳ Liste d'attente : {ev.name} ({ev.start_at:%a %d/%m %H:%M})"
-        return False, f"❓ Statut après tentative : {fresh.my_group}/{fresh.my_status} sur {ev.name}"
+    def book(self, ev: Event) -> tuple[str, Event | None]:
+        """Demande une place puis relit le créneau pour savoir où on en est.
+
+        Retourne (résultat, créneau relu) avec résultat = "booked" (inscrit), "waitlist" (liste
+        d'attente) ou "unknown" (demande envoyée mais Sporteasy n'a pas confirmé : à revérifier)."""
+        self.set_attendance(ev, "present", timeout=FAST)
+        fresh: Event | None = None
+        for pause in (0.4, 0.8, 1.5):
+            time.sleep(pause)
+            try:
+                fresh = self.event(ev.id, timeout=FAST)
+            except PermissionError:
+                raise
+            except Exception as e:  # noqa: BLE001
+                log.warning("relecture après réservation : %s", e)
+                continue
+            if fresh.mine:
+                return "booked", fresh
+            if fresh.my_group == "waiting_list":
+                return "waitlist", fresh
+        return "unknown", fresh

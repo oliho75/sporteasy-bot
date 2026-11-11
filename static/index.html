@@ -70,6 +70,7 @@ h1 em{color:var(--accent);font-style:italic}
 .slot.full .cap{color:var(--danger)}
 .slot.booked{border-color:var(--ok);background:rgba(94,230,160,.08)}
 .slot.booked .n::before{content:"✓ ";color:var(--ok)}
+.slot.wl{border-color:var(--warn)}
 .slot.cancelled{text-decoration:line-through;opacity:.45}
 .slot.p1{border-color:var(--accent);box-shadow:inset 3px 0 0 var(--accent)}
 .slot.p2{border-color:var(--accent2);box-shadow:inset 3px 0 0 var(--accent2)}
@@ -100,6 +101,7 @@ input[type=number]{width:52px;background:var(--panel2);border:1px solid var(--li
 .legend{display:flex;flex-wrap:wrap;gap:8px 14px;color:var(--muted);font-size:11px}
 .legend i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:5px;vertical-align:-1px}
 .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#fff;color:#111;padding:10px 16px;border-radius:12px;font-weight:600;font-size:13px;box-shadow:0 10px 30px rgba(0,0,0,.4);opacity:0;pointer-events:none;transition:.2s}
+.toast{z-index:950;max-width:calc(100vw - 32px);text-align:center;bottom:calc(20px + env(safe-area-inset-bottom))}
 .toast.show{opacity:1}
 .info-btn{width:30px;height:30px;border-radius:50%;border:1.5px solid var(--line);background:var(--panel);color:var(--muted);font:italic 700 15px Georgia,serif;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;padding:0;flex:none}
 .inv-btn{width:30px;height:30px;border-radius:50%;border:0;background:var(--accent);color:#111;font:800 18px Inter,system-ui;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;padding:0;flex:none}
@@ -155,14 +157,26 @@ body::before{content:"";position:fixed;top:0;left:0;right:0;height:env(safe-area
   .m-slot:active{transform:scale(.985)}
   .m-slot .bar{width:5px;height:38px;border-radius:3px;background:var(--line);flex:none}
   .m-slot.p1 .bar{background:var(--accent)}.m-slot.p2 .bar{background:var(--accent2)}.m-slot.booked .bar{background:var(--ok)}
+  .m-slot.wl .bar{background:var(--warn)}
   .m-slot.cancelled{opacity:.4;text-decoration:line-through}
+  .m-slot.flash{animation:flash 1.2s ease-out}
+  @keyframes flash{0%,60%{border-color:var(--accent);box-shadow:0 0 0 3px rgba(201,242,77,.25)}100%{border-color:var(--line);box-shadow:none}}
+  .m-h{margin:16px 0 8px;font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+  .m-wishes{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:2px 14px}
+  .m-w{display:flex;align-items:center;gap:10px;padding:10px 0;border-top:1px solid var(--line);cursor:pointer;-webkit-tap-highlight-color:transparent}
+  .m-w:first-child{border-top:0}
+  .m-w .k{width:4px;height:30px;border-radius:2px;background:var(--accent);flex:none}
+  .m-w.p2 .k{background:var(--accent2)}.m-w.booked .k{background:var(--ok)}
+  .m-w .b{flex:1;min-width:0}
+  .m-w .b b{display:block;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .m-w .b small{display:block;color:var(--muted);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .m-slot .b{flex:1;min-width:0}
   .m-slot .b b{display:block;font-size:15px}
   .m-slot .b small{color:var(--muted);font-size:12px}
   .m-slot .r{text-align:right;flex:none}
   .m-slot .r .cap{color:var(--muted);font-size:12px;font-variant-numeric:tabular-nums}
   .m-slot .r .tg{display:block;font-size:11px;font-weight:700;margin-top:2px}
-  .m-slot.p1 .r .tg{color:var(--accent)}.m-slot.p2 .r .tg{color:var(--accent2)}.m-slot.booked .r .tg{color:var(--ok)}
+  .m-slot.p1 .r .tg{color:var(--accent)}.m-slot.p2 .r .tg{color:var(--accent2)}.m-slot.wl .r .tg{color:var(--warn)}.m-slot.booked .r .tg{color:var(--ok)}
   .m-slot.open .b small::before{content:"● ";color:var(--accent2)}
   .m-foot{margin-top:24px;color:var(--muted);font-size:12px;line-height:1.6}
   .m-log{display:none;font-family:ui-monospace,Menlo,monospace;font-size:11px;color:var(--muted);white-space:pre-wrap;margin-top:8px}
@@ -256,14 +270,16 @@ setTimeout(function(){s.classList.add('out');setTimeout(function(){s.remove()},4
     <div class="card">
       <h3>Journal</h3>
       <div class="log" id="log"></div>
+      <div class="empty" id="ver" style="padding-top:10px"></div>
     </div>
   </aside>
 </div>
 <div class="m" id="m">
   <div class="m-top"><h1><span class="logo"><span class="logo-ez">EZ</span><span class="logo-bad">bad</span><span class="logo-emoji">🏸</span></span> <span id="muname" style="font-size:13px;color:var(--muted);font-family:Inter"></span></h1><div style="display:flex;align-items:center;gap:10px"><button class="inv-btn adm" onclick="openInvite()" aria-label="Inviter" style="display:none">＋</button><button class="info-btn" onclick="openHelp()" aria-label="Mode d'emploi">i</button><div class="switch" id="msw" onclick="togglePause()"></div></div></div>
   <div class="m-sub"><span id="mstatus">…</span><span id="mcount"></span></div>
+  <div id="mwishes"></div>
   <div id="mlist"></div>
-  <div class="m-foot"><a href="#" onclick="document.getElementById('mlog').classList.toggle('show');return false">Journal</a> · <a href="#" onclick="relogin();return false">Re-login</a> · <a href="#" id="mntfy" onclick="testNotif();return false">Tester la notif</a></div>
+  <div class="m-foot"><a href="#" onclick="document.getElementById('mlog').classList.toggle('show');return false">Journal</a> · <a href="#" onclick="relogin();return false">Re-login</a> · <a href="#" id="mntfy" onclick="testNotif();return false">Tester la notif</a><div id="mver"></div></div>
   <div class="m-log" id="mlog"></div>
 </div>
 <div class="help-bg" id="help" onclick="if(event.target===this)closeHelp()">
@@ -277,7 +293,8 @@ setTimeout(function(){s.classList.add('out');setTimeout(function(){s.remove()},4
       <li><span class="chip p2">2×</span> <b>Fallback</b> : ton plan B le même jour.</li>
       <li><span class="chip">3×</span> <b>Retiré</b>.</li>
     </ul>
-    <p>Taper un créneau où tu es déjà inscrit (bordure verte) te propose de te désinscrire, avec confirmation.</p>
+    <p>Taper un créneau où tu es déjà inscrit (barre verte) ou en liste d'attente (barre orange) te propose de te désinscrire, avec confirmation.</p>
+    <p>En haut de l'écran, <b>Mes options</b> résume ce que le bot a en main ; tape une ligne pour retrouver le créneau.</p>
 
     <h4>Le fallback</h4>
     <p>C'est un plan B, jour par jour. Si ta priorité du jour est réservée, le bot n'y touche pas. Si tu la rates, il prend le fallback. Et si la priorité passe finalement (liste d'attente), il libère le fallback tout seul.</p>
@@ -297,15 +314,17 @@ setTimeout(function(){s.classList.add('out');setTimeout(function(){s.remove()},4
       <li><b>programmé</b> : le bot connaît l'heure d'ouverture et attend.</li>
       <li><b>ouvert · attente</b> : c'est ouvert, il laisse passer le délai.</li>
       <li><b style="color:var(--ok)">réservé</b> : c'est dans la poche.</li>
-      <li><b style="color:var(--warn)">liste d'attente</b> : complet, tu es en attente.</li>
-      <li><b style="color:var(--danger)">erreur</b> : regarde le journal.</li>
+      <li><b style="color:var(--warn)">liste d'attente</b> : complet, tu es dans la file. Si une place se libère, tu reçois une notif.</li>
+      <li><b style="color:var(--warn)">ignoré</b> : quota de la semaine atteint, ou ta priorité du jour est déjà réservée.</li>
+      <li><b style="color:var(--danger)">erreur</b> : la réservation n'est pas passée. Le bot réessaie tout seul ; le détail est dans le journal.</li>
+      <li><b>annulé</b> : le club a annulé ou supprimé le créneau.</li>
     </ul>
 
     <h4>Le switch en haut</h4>
     <p>Vert = le bot tourne. Gris = en pause, il ne réserve rien.</p>
 
     <h4>Notifications</h4>
-    <p>Installe l'app <b>ntfy</b>, abonne-toi au canal ci-dessous (nom exact), et tu reçois une notif à chaque réservation, liste d'attente ou erreur.</p>
+    <p>Installe l'app <b>ntfy</b>, abonne-toi au canal ci-dessous (nom exact), et tu reçois une notif à chaque réservation, liste d'attente, place libérée, créneau annulé ou erreur. Une seule notif par événement.</p>
 
     <h4>Mon compte</h4>
     <div class="acc">
@@ -347,15 +366,33 @@ const $=s=>document.querySelector(s);
 const pad=n=>String(n).padStart(2,'0');
 const hm=d=>pad(d.getHours())+'h'+(d.getMinutes()?pad(d.getMinutes()):'');
 const dkey=d=>d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());
-function toast(m){const t=$('#toast');t.textContent=m;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),1800)}
+const dow=d=>DAYS[(d.getDay()+6)%7];
+// Les horaires sont ceux du club : on lit l'heure écrite dans la date, sans la convertir au fuseau du téléphone.
+function wall(iso){const m=/^(\d{4})-(\d\d)-(\d\d)T(\d\d):(\d\d)(?::(\d\d))?/.exec(iso||'');return m?new Date(+m[1],m[2]-1,+m[3],+m[4],+m[5],+(m[6]||0)):new Date(iso)}
+const clubNow=()=>S.now?wall(S.now):new Date();
+function otherZone(){const m=/([+-])(\d\d):(\d\d)$/.exec(S.now||'');if(!m)return false;return (m[1]==='-'?-1:1)*(+m[2]*60+ +m[3])!==-new Date().getTimezoneOffset()}
+let toastT=null;
+function toast(m,ms){const t=$('#toast');t.textContent=m;t.classList.add('show');clearTimeout(toastT);toastT=setTimeout(()=>t.classList.remove('show'),ms||1800)}
+const short=e=>e.name.replace(/\s*\[\d+\]\s*/,'').replace(/\d{1,2}h\d{0,2}\s*-\s*\d{1,2}h\d{0,2}/,'').trim()||e.name;
+const todo=w=>['pending','waiting','delaying'].includes(w.state||'pending');
 
 async function api(method,url,body){
   const r=await fetch(url,{method,headers:{'Content-Type':'application/json'},body:body?JSON.stringify(body):undefined});
   if(!r.ok){let e='';try{e=(await r.json()).detail||''}catch{};throw new Error(e||r.status)}
   return r.json();
 }
+// Les actions partent dans l'ordre, l'écran se met à jour tout de suite (sans attendre le serveur).
+let Q=Promise.resolve(),PENDING=0,LOADING=false;
+function send(method,url,body,okMsg){
+  PENDING++;
+  Q=Q.then(()=>api(method,url,body)).then(()=>{if(okMsg)toast(okMsg)}).catch(e=>toast('Erreur : '+e.message,3500)).finally(()=>{PENDING--;if(!PENDING)load()});
+}
 async function load(){
-  try{S=await api('GET','api/state');render()}catch(e){$('#statusTxt').textContent='serveur injoignable';$('#status').className='pill err'}
+  if(LOADING||PENDING)return;LOADING=true;
+  try{const d=await api('GET','api/state');if(!PENDING){S=d;render()}}
+  catch(e){const t=/token|401|404/.test(e.message)?'🔒 session expirée : rouvre ton lien perso':'⚠️ serveur injoignable';
+    $('#statusTxt').textContent=t;$('#status').className='pill err';$('#mstatus').textContent=t}
+  finally{LOADING=false}
 }
 
 function render(){
@@ -366,20 +403,23 @@ function render(){
     if(document.activeElement!==$('#a_ntfy'))$('#a_ntfy').value=a.ntfy_topic||'';
     $('#a_db').style.display=a.kind==='db'?'':'none';$('#a_env').style.display=a.kind==='db'?'none':'';}
   for(const id of ['mntfy','dntfy']){const el=document.getElementById(id); if(el) el.style.display=S.ntfy?'':'none';}
+  const ver=(S.version?'EZ bad '+S.version:'')+(otherZone()?' · horaires à l\'heure du club':'');
+  $('#ver').textContent=ver;$('#mver').textContent=ver;
+  const today=clubNow();today.setHours(0,0,0,0);
+  const mine=Object.entries(S.wishes).filter(([id,w])=>wall(w.start_at)>=today).sort((a,b)=>a[1].start_at.localeCompare(b[1].start_at));
   // status
   const st=$('#status');
   if(S.error){st.className='pill err';$('#statusTxt').textContent='Sporteasy : '+S.error.slice(0,60)}
   else if(S.settings.paused){st.className='pill paused';$('#statusTxt').textContent='en pause'}
-  else{st.className='pill';$('#statusTxt').textContent='watcher actif · '+Object.values(S.wishes).filter(w=>['pending','waiting'].includes(w.state)).length+' en attente'}
+  else{st.className='pill';$('#statusTxt').textContent='watcher actif · '+mine.filter(x=>todo(x[1])).length+' en attente'}
   $('#sw').classList.toggle('on',!S.settings.paused);
-  $('#maxw').value=S.settings.max_per_week||5;
+  if(document.activeElement.id!=='maxw')$('#maxw').value=S.settings.max_per_week||5;
   const DD={mon:[0.033,0.083],thu:[0.08,0.83],default:[1,5],...(S.settings.delays||{})};
   for(const k of ['mon','thu','default']){ if(document.activeElement.id!=='d_'+k+'_0')$('#d_'+k+'_0').value=DD[k][0]; if(document.activeElement.id!=='d_'+k+'_1')$('#d_'+k+'_1').value=DD[k][1]; }
 
   // calendar
   const byDay={};
   for(const e of S.events){const k=e.start_at.slice(0,10);(byDay[k]=byDay[k]||[]).push(e)}
-  const today=new Date();today.setHours(0,0,0,0);
   const start=new Date(today);start.setDate(start.getDate()-((start.getDay()+6)%7));
   let html='';
   for(let w=0;w<6;w++){
@@ -391,7 +431,7 @@ function render(){
       const k=dkey(day);const isT=day.getTime()===today.getTime();const past=day<today;
       const list=byDay[k]||[];
       html+=`<div class="day ${isT?'today':''} ${past?'past':''} ${list.length?'':'empty-day'}"><div class="dh"><b>${day.getDate()}</b><span>${DAYS[d]} ${window.innerWidth<700?MONTHS[day.getMonth()]:''}</span></div>`;
-      for(const e of (byDay[k]||[])) html+=slotHtml(e);
+      for(const e of list) html+=slotHtml(e);
       html+='</div>';
     }
     html+='</div></section>';
@@ -399,66 +439,84 @@ function render(){
   $('#cal').innerHTML=html;
 
   // wishes
-  const ws=Object.entries(S.wishes).sort((a,b)=>a[1].start_at.localeCompare(b[1].start_at));
-  $('#wishes').innerHTML=ws.length?ws.map(([id,w])=>{
-    const d=new Date(w.start_at);
-    return `<div class="wish ${w.priority>1?'p2':''}"><div class="k"></div><div class="b"><b>${esc(w.name)}</b><small>${DAYS[(d.getDay()+6)%7]} ${d.getDate()} ${MONTHS[d.getMonth()]} · ${hm(d)}${w.last?' · '+esc(w.last):''}</small></div><span class="tag ${w.state||''}">${label(w.state)}</span><span class="x" title="retirer" onclick="removeWish(${id})">×</span></div>`;
+  $('#wishes').innerHTML=mine.length?mine.map(([id,w])=>{
+    const d=wall(w.start_at);
+    return `<div class="wish ${w.priority>1?'p2':''}"><div class="k"></div><div class="b"><b>${esc(w.name)}</b><small>${dow(d)} ${d.getDate()} ${MONTHS[d.getMonth()]} · ${hm(d)}${w.last?' · '+esc(w.last):''}</small></div><span class="tag ${esc(w.state||'')}">${label(w.state)}</span><span class="x" title="retirer" onclick="removeWish(${+id})">×</span></div>`;
   }).join(''):'<div class="empty">Aucune option. Clique sur des créneaux dans le calendrier.</div>';
 
   $('#log').textContent=S.log.slice().reverse().join('\n');
-  renderMobile(byDay,today);
+  renderMobile(byDay,today,mine);
 }
-function renderMobile(byDay,today){
+function wishInfo(w){
+  const st=w.state||'pending';
+  if(st==='pending'||st==='waiting'){const o=w.registration_open_at?wall(w.registration_open_at):null;return o?'ouvre '+dow(o)+' '+o.getDate()+' à '+hm(o):'en attente d\'ouverture'}
+  if(st==='delaying'){const b=w.book_at?wall(w.book_at):null;return b?'ouvert · je réserve vers '+hm(b):'ouvert'}
+  if(st==='booked')return 'c\'est dans la poche';
+  if(st==='waitlist')return 'complet · tu es dans la file';
+  return w.last||'';
+}
+function renderMobile(byDay,today,mine){
   const paused=S.settings.paused;
   $('#msw').classList.toggle('on',!paused);
-  $('#mstatus').textContent=S.error?'⚠️ '+S.error.slice(0,50):(paused?'⏸ en pause':'● actif');
-  const nb=Object.values(S.wishes);
-  $('#mcount').textContent=nb.length?`${nb.filter(w=>w.state==='booked').length} réservé · ${nb.filter(w=>['pending','waiting'].includes(w.state)).length} programmé`:'';
-  const keys=Object.keys(byDay).sort().filter(k=>new Date(k)>=today);
+  if(S.error)$('#mstatus').textContent='⚠️ '+S.error.slice(0,50);
+  else $('#mstatus').innerHTML=paused?'⏸ en pause':'<span style="color:var(--ok)">●</span> actif';
+  const live=mine.filter(x=>!['cancelled','released'].includes(x[1].state));
+  $('#mcount').textContent=live.length?`${live.filter(x=>x[1].state==='booked').length} réservé · ${live.filter(x=>todo(x[1])).length} programmé`:'';
+  $('#mwishes').innerHTML=live.length?'<div class="m-h">Mes options</div><div class="m-wishes">'+live.map(([id,w])=>{
+    const d=wall(w.start_at);const st=w.state||'pending';
+    const name=w.name.replace(/\s*\[\d+\]\s*/,'').replace(/\d{1,2}h\d{0,2}\s*-\s*\d{1,2}h\d{0,2}/,'').trim()||w.name;
+    return `<div class="m-w ${w.priority>1?'p2':''} ${st==='booked'?'booked':''}" onclick="jump(${+id})"><span class="k"></span><div class="b"><b>${esc(name)} · ${dow(d)} ${d.getDate()} ${MONTHS[d.getMonth()]} ${hm(d)}</b><small>${esc(wishInfo(w))}</small></div><span class="tag ${esc(st)}">${st==='pending'?(w.priority>1?'fallback':'priorité'):label(st)}</span></div>`;
+  }).join('')+'</div>':'';
+  const tk=dkey(today);
+  const keys=Object.keys(byDay).sort().filter(k=>k>=tk);
   $('#mlist').innerHTML=keys.map(k=>{
-    const d=new Date(k+'T12:00:00');const isT=k===dkey(today);
+    const d=wall(k+'T12:00');const isT=k===tk;
     const rows=byDay[k].map(e=>{
-      const w=S.wishes[e.id];const a=new Date(e.start_at),b=new Date(e.end_at);
-      const cls=['m-slot',e.step==='registration_opened'?'open':'',e.my_group==='participant'?'booked':'',e.is_cancelled?'cancelled':'',w?(w.priority>1?'p2':'p1'):''].join(' ');
-      const name=e.name.replace(/\s*\[\d+\]\s*/,'').replace(/\d{1,2}h\d{0,2}\s*-\s*\d{1,2}h\d{0,2}/,'').trim()||e.name;
+      const w=S.wishes[e.id];const a=wall(e.start_at),b=wall(e.end_at);
+      const got=e.my_group==='participant',wl=e.my_group==='waiting_list';
+      const cls=['m-slot',e.step==='registration_opened'?'open':'',got?'booked':'',wl?'wl':'',e.is_cancelled?'cancelled':'',w?(w.priority>1?'p2':'p1'):''].join(' ');
       const cnt=e.counts&&e.counts.participant!=null?e.counts.participant+(e.capacity?'/'+e.capacity:''):(e.capacity?'max '+e.capacity:'');
-      const tg=e.my_group==='participant'?'réservé':w?(w.priority>1?'fallback':'priorité')+(w.state&&w.state!=='pending'?' · '+label(w.state):''):'';
-      const op=e.registration_open_at?new Date(e.registration_open_at):null;
-      const opTxt=e.step==='registration_opened'?'ouvert':op?('ouvre '+DAYS[(op.getDay()+6)%7]+' '+op.getDate()+' à '+hm(op)):'';
-      return `<div class="${cls}" onclick="cycle(${e.id})"><div class="bar"></div><div class="b"><b>${esc(name)}</b><small>${hm(a)}–${hm(b)}${e.location?' · '+esc(e.location):''}${opTxt?'<br>'+opTxt:''}</small></div><div class="r"><span class="cap">${cnt}</span><span class="tg">${tg}</span></div></div>`;
+      const tg=got?'réservé':wl?'liste d\'attente':w?(w.priority>1?'fallback':'priorité')+(w.state&&w.state!=='pending'?' · '+label(w.state):''):'';
+      const op=e.registration_open_at?wall(e.registration_open_at):null;
+      const opTxt=e.step==='registration_opened'?'ouvert':op?('ouvre '+dow(op)+' '+op.getDate()+' à '+hm(op)):'';
+      return `<div class="${cls}" id="ms-${e.id}" onclick="cycle(${e.id})"><div class="bar"></div><div class="b"><b>${esc(short(e))}</b><small>${hm(a)}–${hm(b)}${e.location?' · '+esc(e.location):''}${opTxt?'<br>'+opTxt:''}</small></div><div class="r"><span class="cap">${cnt}</span><span class="tg">${tg}</span></div></div>`;
     }).join('');
-    return `<div class="m-day ${isT?'today':''}"><b>${isT?'Aujourd\'hui':DAYS[(d.getDay()+6)%7]+' '+d.getDate()}</b><span>${MONTHS[d.getMonth()]}</span></div>${rows}`;
+    return `<div class="m-day ${isT?'today':''}"><b>${isT?'Aujourd\'hui':dow(d)+' '+d.getDate()}</b><span>${MONTHS[d.getMonth()]}</span></div>${rows}`;
   }).join('')||'<div class="empty">Aucun créneau à venir.</div>';
   $('#mlog').textContent=S.log.slice().reverse().join('\n');
 }
 function slotHtml(e){
-  const w=S.wishes[e.id];const d=new Date(e.start_at);const d2=new Date(e.end_at);
-  const cls=['slot',e.step==='registration_opened'?'open':'',e.full?'full':'',e.my_group==='participant'?'booked':'',e.is_cancelled?'cancelled':'',w?(w.priority>1?'p2':'p1'):''].join(' ');
+  const w=S.wishes[e.id];const d=wall(e.start_at);const d2=wall(e.end_at);
+  const cls=['slot',e.step==='registration_opened'?'open':'',e.full?'full':'',e.my_group==='participant'?'booked':'',e.my_group==='waiting_list'?'wl':'',e.is_cancelled?'cancelled':'',w?(w.priority>1?'p2':'p1'):''].join(' ');
   const cnt=e.counts&&e.counts.participant!=null?e.counts.participant+(e.capacity?'/'+e.capacity:''):(e.capacity?'/'+e.capacity:'');
-  const name=e.name.replace(/\s*\[\d+\]\s*/,'').replace(/\d{1,2}h\d{0,2}\s*-\s*\d{1,2}h\d{0,2}/,'').trim();
-  const open=e.registration_open_at?new Date(e.registration_open_at):null;
+  const open=e.registration_open_at?wall(e.registration_open_at):null;
   const title=`${e.name}\n${e.location||''}\nOuverture : ${open?open.toLocaleString('fr-FR'):'?'}\nStatut : ${e.step}${e.my_group?' · moi : '+e.my_group:''}`;
-  return `<div class="${cls}" title="${esc(title)}" onclick="cycle(${e.id})">${w?`<span class="badge">${w.priority>1?'FB':'P1'}</span>`:''}<div class="n">${esc(name||e.name)}</div><div class="t"><span>${hm(d)}–${hm(d2)}</span><span class="cap">${cnt}</span></div>${w&&w.state?`<div class="st ${w.state}">${label(w.state)}</div>`:''}</div>`;
+  return `<div class="${cls}" title="${esc(title)}" onclick="cycle(${e.id})">${w?`<span class="badge">${w.priority>1?'FB':'P1'}</span>`:''}<div class="n">${esc(short(e))}</div><div class="t"><span>${hm(d)}–${hm(d2)}</span><span class="cap">${cnt}</span></div>${w&&w.state?`<div class="st ${esc(w.state)}">${label(w.state)}</div>`:''}</div>`;
 }
-function label(s){return {pending:'en attente',waiting:'programmé',delaying:'ouvert · attente',booked:'réservé',waitlist:'liste d\'attente',full:'complet',error:'erreur',skipped:'ignoré',cancelled:'annulé',released:'libéré'}[s]||s||'—'}
-function esc(s){return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
+function label(s){return {pending:'en attente',waiting:'programmé',delaying:'ouvert · attente',booked:'réservé',waitlist:'liste d\'attente',full:'complet',error:'erreur',skipped:'ignoré',cancelled:'annulé',released:'libéré'}[s]||esc(s||'—')}
+function esc(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 function isoWeek(d){const t=new Date(Date.UTC(d.getFullYear(),d.getMonth(),d.getDate()));const n=t.getUTCDay()||7;t.setUTCDate(t.getUTCDate()+4-n);const y=new Date(Date.UTC(t.getUTCFullYear(),0,1));return Math.ceil(((t-y)/864e5+1)/7)}
+function jump(id){const el=document.getElementById('ms-'+id);if(!el)return;el.scrollIntoView({behavior:'smooth',block:'center'});el.classList.remove('flash');void el.offsetWidth;el.classList.add('flash')}
 
-async function cycle(id){
+function cycle(id){
   const e=S.events.find(x=>x.id===id);if(!e||e.is_cancelled)return;
   const w=S.wishes[id];
-  try{
-    if(e.my_group==='participant'&&!w){ if(confirm('Tu es déjà inscrit. Te désinscrire ?')){await api('POST','api/release/'+id);toast('Désinscrit')} }
-    else if(!w){await api('POST','api/wish',{event_id:id,priority:1,waitlist_ok:true});toast('Priorité ✓')}
-    else if(w.priority===1){await api('POST','api/wish',{event_id:id,priority:2,waitlist_ok:true});toast('Fallback ✓')}
-    else{await api('DELETE','api/wish/'+id);toast('Retiré')}
-  }catch(err){toast('Erreur : '+err.message)}
-  load();
+  if(e.my_group==='participant'||e.my_group==='waiting_list'){
+    const wl=e.my_group==='waiting_list';
+    if(!confirm(wl?'Tu es en liste d\'attente pour « '+short(e)+' ». La quitter ?':'Tu es inscrit à « '+short(e)+' ». Te désinscrire ?'))return;
+    e.my_group=null;e.my_status=null;delete S.wishes[id];render();
+    send('POST','api/release/'+id,null,wl?'Retiré de la liste d\'attente':'Désinscrit');
+    return;
+  }
+  if(!w){S.wishes[id]={name:e.name,start_at:e.start_at,registration_open_at:e.registration_open_at,priority:1,state:'pending'};send('POST','api/wish',{event_id:id,priority:1,waitlist_ok:true},'Priorité ✓')}
+  else if(w.priority===1){w.priority=2;send('POST','api/wish',{event_id:id,priority:2,waitlist_ok:true},'Fallback ✓')}
+  else{delete S.wishes[id];send('DELETE','api/wish/'+id,null,'Retiré')}
+  render();
 }
-async function removeWish(id){await api('DELETE','api/wish/'+id);load()}
-async function togglePause(){await api('POST','api/settings',{paused:!S.settings.paused});load()}
-async function setDelay(k){const lo=+$('#d_'+k+'_0').value,hi=+$('#d_'+k+'_1').value;await api('POST','api/settings',{delays:{...(S.settings.delays||{}),[k]:[lo,hi]}});load()}
-async function setMax(v){await api('POST','api/settings',{max_per_week:+v});load()}
+function removeWish(id){delete S.wishes[id];render();send('DELETE','api/wish/'+id,null,'Retiré')}
+function togglePause(){S.settings.paused=!S.settings.paused;render();send('POST','api/settings',{paused:S.settings.paused},S.settings.paused?'Bot en pause':'Bot actif')}
+function setDelay(k){const lo=+$('#d_'+k+'_0').value,hi=+$('#d_'+k+'_1').value;send('POST','api/settings',{delays:{...(S.settings.delays||{}),[k]:[lo,hi]}},'Délai enregistré')}
+function setMax(v){send('POST','api/settings',{max_per_week:+v},'Enregistré')}
 function openHelp(){$('#help').classList.add('show');try{localStorage.setItem('ezbad_help_seen','1')}catch(e){}}
 function closeHelp(){$('#help').classList.remove('show')}
 let INV=null;
@@ -466,20 +524,24 @@ async function openInvite(){$('#invite').classList.add('show');await refreshInvi
 function closeInvite(){$('#invite').classList.remove('show')}
 async function newInvite(){try{const r=await api('POST','api/invites');INV=location.origin+r.path;$('#inv_link').textContent=INV;$('#inv_days').textContent=r.expires_days;refreshInvites()}catch(e){toast('Erreur : '+e.message)}}
 async function refreshInvites(){try{const r=await api('GET','api/invites');
-  $('#inv_pending').innerHTML=r.pending.length?r.pending.map(p=>`<div><span>…/join/${esc(p.code)}</span><span>expire ${new Date(p.expires_at).toLocaleDateString('fr-FR',{day:'numeric',month:'short'})} <button class="mini" onclick="revokeInvite('${esc(p.code)}')">✕</button></span></div>`).join(''):'<div>Aucune</div>';
-  $('#inv_members').innerHTML=r.members.map(m=>`<div><b>${esc(m.name)}</b><span>${esc(m.club.replace('.sporteasy.net',''))}${m.kind==='env'?' · variables':''}</span></div>`).join('')}catch(e){}}
-async function revokeInvite(c){await api('DELETE','api/invites/'+c);if(INV&&INV.endsWith(c)){INV=null;$('#inv_link').textContent='—'}refreshInvites()}
+  $('#inv_pending').innerHTML=r.pending.length?r.pending.map(p=>`<div><span>…/join/${esc(p.code)}</span><span>expire ${wall(p.expires_at).toLocaleDateString('fr-FR',{day:'numeric',month:'short'})} <button class="mini" onclick="revokeInvite('${esc(p.code)}')">✕</button></span></div>`).join(''):'<div>Aucune</div>';
+  $('#inv_members').innerHTML=r.members.map(m=>`<div><b>${esc(m.name)}</b><span>${m.ok===false?'⚠️ connexion Sporteasy · ':''}${esc(m.club.replace('.sporteasy.net',''))}${m.kind==='env'?' · variables':''}</span></div>`).join('')}catch(e){}}
+async function revokeInvite(c){try{await api('DELETE','api/invites/'+c)}catch(e){toast('Erreur : '+e.message)}if(INV&&INV.endsWith(c)){INV=null;$('#inv_link').textContent='—'}refreshInvites()}
 async function copyInvite(){if(!INV)return;try{await navigator.clipboard.writeText(INV);toast('Lien copié')}catch(e){toast(INV)}}
 async function shareInvite(){if(!INV)return;if(navigator.share){try{await navigator.share({title:'EZ bad',text:'Branche ton compte Sporteasy sur EZ bad 🏸',url:INV})}catch(e){}}else copyInvite()}
 async function copyLink(){const l=S.account&&S.account.link;if(!l)return;const u=location.origin+l;try{await navigator.clipboard.writeText(u);toast('Lien perso copié')}catch(e){toast(u)}}
 async function saveNtfy(){try{const r=await api('POST','api/account/ntfy',{topic:$('#a_ntfy').value});toast(r.topic?'Canal enregistré':'Canal retiré');load()}catch(e){toast('Erreur : '+e.message)}}
 async function savePwd(){const v=$('#a_pwd').value;if(!v)return;const b=$('#a_pwd_btn');b.disabled=true;b.textContent='…';toast('Test sur Sporteasy…');
-  try{await api('POST','api/account/password',{password:v});$('#a_pwd').value='';toast('Mot de passe mis à jour ✅')}catch(e){toast(e.message)}finally{b.disabled=false;b.textContent='OK'}}
+  try{await api('POST','api/account/password',{password:v});$('#a_pwd').value='';toast('Mot de passe mis à jour ✅')}catch(e){toast(e.message,3500)}finally{b.disabled=false;b.textContent='OK'}}
 async function delAccount(){if(!confirm('Supprimer ton compte EZ bad ? Le bot arrête de réserver pour toi et ton mot de passe est effacé. Tes inscriptions Sporteasy déjà faites restent.'))return;
   try{await api('DELETE','api/account');document.body.innerHTML='<div style="padding:60px 24px;text-align:center;color:#8b93a7;font-family:Inter,system-ui">Compte supprimé. À bientôt 🏸</div>'}catch(e){toast('Erreur : '+e.message)}}
-async function testNotif(){try{await api('POST','api/test-notif');toast('Notif envoyée 📲')}catch(e){toast('Pas de canal ntfy configuré')}}
-async function relogin(){toast('Login en cours…');try{await api('POST','api/login');toast('Connecté')}catch(e){toast('Login KO : '+e.message)}load()}
-load();setInterval(load,30000);
+async function testNotif(){try{await api('POST','api/test-notif');toast('Notif envoyée 📲')}catch(e){toast(e.message,4000)}}
+async function relogin(){toast('Connexion à Sporteasy…',15000);try{await api('POST','api/login');toast('Connecté')}catch(e){toast('Connexion impossible : '+e.message,4000)}load()}
+load();
+setInterval(()=>{if(!document.hidden)load()},30000);
+// retour au premier plan (app rouverte depuis l'écran d'accueil) : on rafraîchit tout de suite
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)load()});
+window.addEventListener('pageshow',e=>{if(e.persisted)load()});
 try{if(!localStorage.getItem('ezbad_help_seen'))setTimeout(openHelp,900)}catch(e){}
 </script>
 </body>

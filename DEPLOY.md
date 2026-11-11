@@ -31,13 +31,17 @@ SPORTEASY_TEAM_HOST=sitebad.sporteasy.net
 TZ=Europe/Paris
 ```
 Ajouter un compte = ajouter un bloc USER3_* et redéployer. Chacun règle ses délais dans son UI.
-Lien court à envoyer à chacun : `https://<domaine>/i/<USERn_INVITE>` (mets `USERn_INVITE=unmotcourt`,
-sinon c'est les 8 premiers caractères du token). Le lien pose le cookie et redirige vers sa page ;
-le token n'est jamais visible dans l'URL.
+Lien perso à envoyer à chacun : `https://<domaine>/i/<USERn_INVITE>` (sans `USERn_INVITE`, ce sont les
+8 premiers caractères du token). Le lien pose le cookie et redirige vers sa page ; le token n'est jamais
+visible dans l'URL. **Ce lien est la clé du compte** : choisis un code impossible à deviner
+(`prenom-` + 6 caractères au hasard, ex. `openssl rand -hex 3`), pas `prenom-quelquechose`.
+Changer un code ne casse pas l'app déjà installée sur un téléphone (elle reste reconnue par son cookie).
 Optionnelles (mêmes valeurs que .env.example) : `MAX_PER_WEEK`, `NOTIFY_WEBHOOK`, `TICK_SECONDS`…
 **Notifications sur le téléphone (ntfy, gratuit)** : chacun installe l'app ntfy (App Store / Play Store),
-s'abonne à un topic imprévisible (ex. `ezbad-ao-7k2x9`), et tu mets `USERn_NTFY=ezbad-ao-7k2x9` dans les
-variables. Bouton "Tester la notif" dans l'UI. Le bot envoie ✅ réservé / ⏳ liste d'attente / ❌ erreur / ↩ libéré.
+s'abonne à un topic imprévisible (ex. `ezbad-prenom-xxxxxx`, avec de vrais caractères au hasard : quiconque
+connaît le nom peut lire les notifs), puis le saisit dans l'app (ⓘ → Mon compte) ou tu mets `USERn_NTFY=…` dans les
+variables. Bouton "Tester la notif" dans l'UI. Le bot envoie ✅ réservé / ⏳ liste d'attente / ✅ place libérée /
+🗑 créneau annulé / ❌ erreur / ↩ libéré — une seule notif par événement.
 **Par email (Resend, sans app)** : crée une clé sur resend.com, mets `RESEND_API_KEY=re_…` dans les variables.
 Chacun reçoit sur son adresse Sporteasy (`USERn_EMAIL`), ou sur `USERn_EMAIL_NOTIF` si défini.
 Sans domaine vérifié chez Resend, seul l'email du compte Resend peut recevoir ; pour envoyer aux potes,
@@ -67,8 +71,18 @@ puis Safari → Partager → **Sur l'écran d'accueil**. Le token est gardé en 
 
 ## Mises à jour
 ```bash
-cd ~/Developer/sporteasy-bot && railway up
+cd ~/Developer/sporteasy-bot && git stash && git pull --rebase && railway up --detach
 ```
+Le bot est coupé 1 à 2 minutes pendant le redémarrage : évite de déployer autour d'une heure d'ouverture
+(19h30–20h15 en général).
 
 ## Vérifier
-Dashboard → Deployments → Logs : tu dois voir `login OK` puis `watcher démarré`.
+`https://<ton-domaine>/healthz` répond `{"ok":true,"version":"…"}` : c'est la version en ligne (elle est aussi
+affichée en bas de l'app). Dashboard → Deployments → Logs : tu dois voir `EZ bad <version>` puis `watcher démarré`.
+
+## Tests (sans compte Sporteasy)
+```bash
+pip install httpx                      # une fois
+python tests/test_engine.py            # moteur + API avec un Sporteasy simulé
+python tests/demo.py                   # l'app en local sur des données fictives
+```

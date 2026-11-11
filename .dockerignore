@@ -6,3 +6,11 @@ wishlist.json
 *.png
 __pycache__
 *.zip
+accounts.json
+invites.json
+secret.key
+*.log.*
+.pending-*
+*.tmp
+*.corrompu
+tests/
